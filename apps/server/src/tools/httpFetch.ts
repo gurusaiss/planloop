@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { ToolDefinition } from "@automation/core";
+import { assertPublicUrl } from "./ssrfGuard.js";
 
 interface Input {
   url: string;
@@ -14,8 +15,6 @@ interface Output {
   fetchedAt: string;
 }
 
-const BLOCKED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "::1"];
-
 export const httpFetchTool: ToolDefinition<Input, Output> = {
   name: "http_fetch_extract",
   description: "Fetch a public web page and extract its readable text content.",
@@ -29,15 +28,7 @@ export const httpFetchTool: ToolDefinition<Input, Output> = {
     },
   },
   async run(input) {
-    const parsed = new URL(input.url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("Only http/https URLs are allowed");
-    }
-    // Basic SSRF guard: block obvious loopback/local targets. A production
-    // deployment should resolve DNS and block private IP ranges too.
-    if (BLOCKED_HOSTS.includes(parsed.hostname)) {
-      throw new Error("Fetching local/internal addresses is not allowed");
-    }
+    const parsed = await assertPublicUrl(input.url);
 
     const res = await fetch(parsed.toString(), {
       headers: { "User-Agent": "AutomationPlatform/0.1 (+local)" },

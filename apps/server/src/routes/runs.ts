@@ -2,6 +2,9 @@ import { Router } from "express";
 import type { LlmProvider, WorkflowPlan } from "@automation/core";
 import { db, DEFAULT_WORKSPACE_ID } from "../db/index.js";
 import { runWorkflow } from "../workflows/engine.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import { validateBody } from "../middleware/validate.js";
+import { approvalDecisionSchema } from "../validation/schemas.js";
 
 export function runsRouter(provider: LlmProvider) {
   const router = Router();
@@ -23,42 +26,50 @@ export function runsRouter(provider: LlmProvider) {
     res.json({ run, steps, approvals });
   });
 
-  router.post("/runs/:id/approvals/:approvalId", async (req, res) => {
-    const decision = req.body?.decision; // 'approved' | 'rejected'
-    if (decision !== "approved" && decision !== "rejected") {
-      return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
-    }
-    const approval = db.prepare("SELECT * FROM approvals WHERE id = ?").get(req.params.approvalId) as any;
-    if (!approval || approval.run_id !== req.params.id) return res.status(404).json({ error: "not found" });
+  router.post(
+    "/runs/:id/approvals/:approvalId",
+    validateBody(approvalDecisionSchema),
+    asyncHandler(async (req, res) => {
+      const decision = req.body.decision as "approved" | "rejected";
+      const approval = db.prepare("SELECT * FROM approvals WHERE id = ?").get(req.params.approvalId) as any;
+      if (!approval || approval.run_id !== req.params.id) return res.status(404).json({ error: "not found" });
+      if (approval.status !== "pending") {
+        return res.status(409).json({ error: `approval already ${approval.status}` });
+      }
 
-    db.prepare("UPDATE approvals SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?").run(
-      decision,
-      new Date().toISOString(),
-      "human",
-      approval.id
-    );
-
-    if (decision === "rejected") {
-      db.prepare("UPDATE runs SET status = 'cancelled', finished_at = ? WHERE id = ?").run(
+      db.prepare("UPDATE approvals SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?").run(
+        decision,
         new Date().toISOString(),
-        req.params.id
+        "human",
+        approval.id
       );
-      return res.json({ status: "cancelled" });
-    }
 
-    const run = db.prepare("SELECT * FROM runs WHERE id = ?").get(req.params.id) as any;
-    const automation = db.prepare("SELECT * FROM automations WHERE id = ?").get(run.automation_id) as any;
-    const plan: WorkflowPlan = JSON.parse(automation.plan_json);
+      if (decision === "rejected") {
+        db.prepare("UPDATE runs SET status = 'cancelled', finished_at = ? WHERE id = ?").run(
+          new Date().toISOString(),
+          req.params.id
+        );
+        return res.json({ status: "cancelled" });
+      }
 
-    runWorkflow(req.params.id, plan, { provider, workspaceId: DEFAULT_WORKSPACE_ID, automationId: automation.id }).catch((err) => {
-      db.prepare("UPDATE runs SET status = 'failed', result_json = ? WHERE id = ?").run(
-        JSON.stringify({ error: String(err) }),
-        req.params.id
-      );
-    });
+      const run = db.prepare("SELECT * FROM runs WHERE id = ?").get(req.params.id) as any;
+      const automation = db.prepare("SELECT * FROM automations WHERE id = ?").get(run.automation_id) as any;
+      const plan: WorkflowPlan = JSON.parse(automation.plan_json);
 
-    res.json({ status: "resumed" });
-  });
+      runWorkflow(req.params.id, plan, {
+        provider,
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        automationId: automation.id,
+      }).catch((err) => {
+        db.prepare("UPDATE runs SET status = 'failed', result_json = ? WHERE id = ?").run(
+          JSON.stringify({ error: String(err) }),
+          req.params.id
+        );
+      });
+
+      res.json({ status: "resumed" });
+    })
+  );
 
   return router;
 }

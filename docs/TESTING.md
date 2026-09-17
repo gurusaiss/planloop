@@ -1,6 +1,6 @@
 # Testing
 
-## Automated tests (20 passing, `apps/server`)
+## Automated tests (34 passing, `apps/server`)
 
 Run with `npm run test:server` from the repo root, or `npx vitest run` from
 `apps/server`. Each test file gets an isolated in-memory SQLite DB and a
@@ -22,6 +22,15 @@ real dev database or the real sandboxed files root.
   mislabeled low-risk step is still gated because the *tool's own*
   declared risk is medium/high); retry-then-fail behavior with the real
   error surfaced.
+- `auth.test.ts` (7) — `requireAuth` rejects missing/wrong/short-vs-long
+  tokens without throwing (the `timingSafeEqual` length guard) and accepts
+  the correct one; `validateBody` rejects empty/out-of-enum input with a
+  readable `details` message and passes valid input through.
+- `ssrfGuard.test.ts` (7) — rejects the cloud metadata endpoint
+  (`169.254.169.254`), literal `10.x`/`192.168.x` addresses, `localhost`,
+  a bracketed literal IPv6 loopback, and non-http(s) schemes; allows a
+  plausible public IP through. **This test file caught a real bug** — see
+  `docs/SECURITY.md`'s SSRF row.
 
 ## Scenario coverage vs. the brief's Section 28 list
 
@@ -55,10 +64,25 @@ real dev database or the real sandboxed files root.
    (files actually moved into `documents/`/`images/` subfolders).
 3. **Full browser UI**: headless-Chromium (Playwright) smoke test
    (`apps/server/scripts/ui-smoke-test.mjs`) drove the actual Next.js
-   production build through the whole loop — typed the request, generated
-   a plan, activated it, ran it, hit the approval screen, approved it, and
-   confirmed the run reached `succeeded` — with screenshots captured at
-   each stage.
+   production build through the whole loop — logged in through the new
+   auth gate, typed the request, generated a plan, activated it, ran it,
+   hit the approval screen, approved it, and confirmed the run reached
+   `succeeded` — with screenshots captured at each stage.
+4. **Post-hardening re-verification** (production build, `node dist/index.js`,
+   `NODE_ENV` unset): confirmed 401 with no token, 401 with a wrong token,
+   200 with the correct token; confirmed zod rejects an empty `text` with a
+   readable `details` array; confirmed `helmet` security headers present;
+   confirmed CORS only reflects the configured origin; confirmed
+   `SIGTERM` triggers the graceful-shutdown log sequence and the process
+   exits cleanly. Then re-ran the full authenticated UI smoke test end to
+   end against this hardened build — same result, plus the login screen.
+   One real bug was caught and fixed during this pass: the initial
+   smoke-test script's `text=Connect` selector matched the page's
+   `<h1>Connect to your automation server</h1>` heading (Playwright's text
+   selector is substring-based) instead of the button, so the login form
+   was never actually submitted — fixed by targeting
+   `getByRole("button", { name: "Connect" })`. This was a test-script bug,
+   not an application bug; noted here rather than silently corrected.
 
 ## What "no fake functionality" means here, concretely
 

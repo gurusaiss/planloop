@@ -1,4 +1,4 @@
-import { v4 as uuid } from "uuid";
+import { randomUUID } from "node:crypto";
 import type { LlmProvider, PlannerResult, WorkflowPlan, WorkflowStep } from "@automation/core";
 import { parseSchedule } from "./scheduleParser.js";
 
@@ -91,7 +91,7 @@ export async function planFromText(input: {
   const requiresApproval = steps.some((s) => s.riskLevel === "high" || s.riskLevel === "medium");
 
   const plan: WorkflowPlan = {
-    id: `plan_${uuid()}`,
+    id: `plan_${randomUUID()}`,
     title,
     summary: buildSummary(steps, schedule?.summary),
     trigger: schedule ? { type: "schedule", cron: schedule.cron } : { type: "manual" },

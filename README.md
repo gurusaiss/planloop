@@ -21,11 +21,14 @@ report for `git status` and confirmation of that.
 
 ```bash
 npm install
-npm run dev:server   # http://localhost:4000
+npm run dev:server   # http://localhost:4000 — prints a bearer token to the log on first run
 npm run dev:web       # http://localhost:3000 (separate terminal)
 ```
 
-See `docs/SETUP.md` for details, `docs/API.md` for the HTTP API.
+Open `http://localhost:3000` and paste the bearer token from the server's
+startup log when prompted (the API requires it — see `docs/SECURITY.md`).
+See `docs/SETUP.md` for details, `docs/API.md` for the HTTP API, and
+`MANUAL_STEPS.md` for what you need to do before deploying it anywhere.
 
 ## What's actually implemented
 
@@ -61,6 +64,7 @@ See `docs/SETUP.md` for details, `docs/API.md` for the HTTP API.
 | `docs/TESTING.md` | What's tested, how, and what's manually verified |
 | `docs/SETUP.md` | How to run it |
 | `docs/ROADMAP.md` | MVP → V1 → V2 → long-term |
+| `MANUAL_STEPS.md` | Everything only you can do: secrets, hosting choice, domain, the GitHub push |
 
 ## Repository layout
 

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { v4 as uuid } from "uuid";
+import { randomUUID } from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,5 +28,5 @@ if (!existing) {
 }
 
 export function newId(prefix: string): string {
-  return `${prefix}_${uuid()}`;
+  return `${prefix}_${randomUUID()}`;
 }

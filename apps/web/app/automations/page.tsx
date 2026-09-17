@@ -18,6 +18,13 @@ export default function AutomationsPage() {
       <p className="subtitle">Everything you&apos;ve activated. Manual or scheduled.</p>
 
       {error && <div className="error-box">{error}</div>}
+      {automations === null && !error && (
+        <>
+          <div className="skeleton" />
+          <div className="skeleton" />
+          <div className="skeleton" />
+        </>
+      )}
       {automations && automations.length === 0 && (
         <div className="empty">
           No automations yet. <Link href="/">Create one</Link>.

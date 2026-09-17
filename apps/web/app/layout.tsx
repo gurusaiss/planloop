@@ -1,5 +1,6 @@
 import "./globals.css";
-import Link from "next/link";
+import AuthGate from "@/components/AuthGate";
+import NavBar from "@/components/NavBar";
 
 export const metadata = {
   title: "Automation Platform",
@@ -10,13 +11,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <nav>
-          <span className="brand">Automation Platform</span>
-          <Link href="/">New automation</Link>
-          <Link href="/automations">Automations</Link>
-          <Link href="/runs">Runs</Link>
-        </nav>
-        <main className="shell">{children}</main>
+        <AuthGate>
+          <NavBar />
+          <main className="shell">{children}</main>
+        </AuthGate>
       </body>
     </html>
   );

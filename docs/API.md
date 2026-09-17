@@ -2,9 +2,19 @@
 
 Base URL: `http://localhost:4000` (dev). All bodies are JSON.
 
+## Authentication
+
+Every route below except `/api/health` requires
+`Authorization: Bearer <ADMIN_TOKEN>`. Missing or wrong token → `401`. See
+`docs/SECURITY.md` and `MANUAL_STEPS.md` for how the token is set.
+
+Rate limits: 120 req/min per IP globally, 20 req/min on `/api/plan`
+specifically. Exceeding either returns `429`.
+
 ## Health
 
-`GET /api/health` → `{ ok: true, provider: string }`
+`GET /api/health` → `{ ok: true, provider: string }` (unauthenticated —
+used by load balancers/uptime checks before any credential exists)
 
 ## Planning (nothing persisted)
 
@@ -49,6 +59,8 @@ from the paused step; `rejected` cancels the run permanently.
 
 ## Error shape
 
-Non-2xx responses are `{ "error": string }`. The workflow engine's own
-failures surface inside `run.result_json` (`{ failedStep, error }`) and on
-the specific `run_steps` row (`error` column) — never silently dropped.
+Non-2xx responses are `{ "error": string }` (validation failures also
+include a `details: string[]` array from the zod schema). The workflow
+engine's own failures surface inside `run.result_json`
+(`{ failedStep, error }`) and on the specific `run_steps` row (`error`
+column) — never silently dropped.

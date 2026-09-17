@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@automation/core";
 import { chromium } from "playwright";
+import { assertPublicUrl } from "./ssrfGuard.js";
 
 interface Input {
   url: string;
@@ -41,10 +42,7 @@ export const browserSnapshotTool: ToolDefinition<Input, Output> = {
     },
   },
   async run(input) {
-    const parsed = new URL(input.url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("Only http/https URLs are allowed");
-    }
+    const parsed = await assertPublicUrl(input.url);
 
     const browser = await getBrowser();
     const context = await browser.newContext();

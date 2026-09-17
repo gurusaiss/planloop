@@ -112,6 +112,7 @@ async function executeStepWithRetry(
         const tool = tools.get(toolName);
         if (!tool) throw new Error(`Unknown tool: ${toolName}`);
         const input = interpolate(step.input ?? {}, outputs);
+        assertRequiredFields(tool, input);
         const output = await tool.run(input, {
           workspaceId: deps.workspaceId,
           automationId: deps.automationId,
@@ -131,6 +132,22 @@ async function executeStepWithRetry(
     }
   }
   return { ok: false, error: lastError, attempt: MAX_ATTEMPTS };
+}
+
+/**
+ * Enforces each tool's declared `inputSchema.required` list before it ever
+ * runs. ToolDefinition.inputSchema is otherwise documentation-only (see
+ * docs/SECURITY.md — "malicious workflow definition" row); this closes the
+ * most common failure mode of that gap (a hand-edited or mis-templated
+ * plan missing a required field) without taking on a full JSON-schema
+ * validator for the MVP.
+ */
+function assertRequiredFields(tool: ToolDefinition, input: Record<string, unknown>) {
+  const required = (tool.inputSchema as { required?: string[] })?.required ?? [];
+  const missing = required.filter((key) => input[key] === undefined || input[key] === null);
+  if (missing.length > 0) {
+    throw new Error(`Tool "${tool.name}" is missing required input field(s): ${missing.join(", ")}`);
+  }
 }
 
 /** Resolves {{steps.X.output.field}} and the diff_snapshot join helper against prior outputs. */

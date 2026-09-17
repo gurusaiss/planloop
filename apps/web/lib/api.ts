@@ -1,14 +1,35 @@
+import { getToken, clearToken } from "./auth";
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+export class UnauthorizedError extends Error {}
+
 async function request(path: string, options?: RequestInit) {
+  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options?.headers ?? {}),
+    },
     cache: "no-store",
   });
+
+  if (res.status === 401) {
+    clearToken();
+    throw new UnauthorizedError("Session token rejected — please re-enter it.");
+  }
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${options?.method ?? "GET"} ${path} failed: ${res.status} ${body}`);
+    let message = body;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.details ? `${parsed.error}: ${parsed.details.join(", ")}` : parsed.error ?? body;
+    } catch {
+      // body wasn't JSON; use as-is
+    }
+    throw new Error(message || `${options?.method ?? "GET"} ${path} failed: ${res.status}`);
   }
   return res.json();
 }

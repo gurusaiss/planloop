@@ -1,27 +1,30 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import type { LlmProvider, WorkflowPlan } from "@automation/core";
 import { db, newId, DEFAULT_WORKSPACE_ID } from "../db/index.js";
 import { planFromText } from "../agents/planner.js";
 import { runWorkflow } from "../workflows/engine.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import { validateBody } from "../middleware/validate.js";
+import { planRequestSchema, createAutomationSchema } from "../validation/schemas.js";
 
-export function automationsRouter(provider: LlmProvider) {
+export function automationsRouter(provider: LlmProvider, planLimiter: RequestHandler) {
   const router = Router();
 
   // STEP 1 of the core loop: user describes the task in plain language,
   // the planner returns a preview plan. Nothing is persisted or executed yet.
-  router.post("/plan", async (req, res) => {
-    const text = (req.body?.text ?? "").toString().trim();
-    if (!text) return res.status(400).json({ error: "text is required" });
-    const result = await planFromText({ text, provider });
-    res.json(result);
-  });
+  router.post(
+    "/plan",
+    planLimiter,
+    validateBody(planRequestSchema),
+    asyncHandler(async (req, res) => {
+      const result = await planFromText({ text: req.body.text, provider });
+      res.json(result);
+    })
+  );
 
   // STEP 2: user reviews the plan and activates it -> persisted as an automation.
-  router.post("/automations", (req, res) => {
-    const plan = req.body?.plan as WorkflowPlan | undefined;
-    if (!plan?.id || !Array.isArray(plan.steps)) {
-      return res.status(400).json({ error: "a valid plan is required" });
-    }
+  router.post("/automations", validateBody(createAutomationSchema), (req, res) => {
+    const plan = req.body.plan as WorkflowPlan;
     const id = newId("auto");
     const now = new Date().toISOString();
     db.prepare(
@@ -56,6 +59,7 @@ export function automationsRouter(provider: LlmProvider) {
   });
 
   router.post("/automations/:id/pause", (req, res) => {
+    if (!getAutomationRaw(req.params.id)) return res.status(404).json({ error: "not found" });
     db.prepare("UPDATE automations SET status = 'paused', updated_at = ? WHERE id = ?").run(
       new Date().toISOString(),
       req.params.id
@@ -64,6 +68,7 @@ export function automationsRouter(provider: LlmProvider) {
   });
 
   router.post("/automations/:id/activate", (req, res) => {
+    if (!getAutomationRaw(req.params.id)) return res.status(404).json({ error: "not found" });
     db.prepare("UPDATE automations SET status = 'active', updated_at = ? WHERE id = ?").run(
       new Date().toISOString(),
       req.params.id
@@ -72,27 +77,32 @@ export function automationsRouter(provider: LlmProvider) {
   });
 
   // STEP: run now (manual trigger), independent of any schedule.
-  router.post("/automations/:id/run", async (req, res) => {
-    const automation = getAutomationRaw(req.params.id);
-    if (!automation) return res.status(404).json({ error: "not found" });
-    const plan: WorkflowPlan = JSON.parse(automation.plan_json);
+  router.post(
+    "/automations/:id/run",
+    asyncHandler(async (req, res) => {
+      const automation = getAutomationRaw(req.params.id);
+      if (!automation) return res.status(404).json({ error: "not found" });
+      const plan: WorkflowPlan = JSON.parse(automation.plan_json);
 
-    const runId = newId("run");
-    db.prepare(
-      `INSERT INTO runs (id, workspace_id, automation_id, status, trigger_type, created_at)
-       VALUES (?, ?, ?, 'queued', 'manual', ?)`
-    ).run(runId, DEFAULT_WORKSPACE_ID, automation.id, new Date().toISOString());
+      const runId = newId("run");
+      db.prepare(
+        `INSERT INTO runs (id, workspace_id, automation_id, status, trigger_type, created_at)
+         VALUES (?, ?, ?, 'queued', 'manual', ?)`
+      ).run(runId, DEFAULT_WORKSPACE_ID, automation.id, new Date().toISOString());
 
-    // Fire-and-forget: the run executes async; the client polls /runs/:id.
-    runWorkflow(runId, plan, { provider, workspaceId: DEFAULT_WORKSPACE_ID, automationId: automation.id }).catch((err) => {
-      db.prepare("UPDATE runs SET status = 'failed', result_json = ? WHERE id = ?").run(
-        JSON.stringify({ error: String(err) }),
-        runId
+      // Fire-and-forget: the run executes async; the client polls /runs/:id.
+      runWorkflow(runId, plan, { provider, workspaceId: DEFAULT_WORKSPACE_ID, automationId: automation.id }).catch(
+        (err) => {
+          db.prepare("UPDATE runs SET status = 'failed', result_json = ? WHERE id = ?").run(
+            JSON.stringify({ error: String(err) }),
+            runId
+          );
+        }
       );
-    });
 
-    res.status(202).json({ runId });
-  });
+      res.status(202).json({ runId });
+    })
+  );
 
   return router;
 }

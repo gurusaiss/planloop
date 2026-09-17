@@ -11,14 +11,15 @@
   Gemini adapters.
 - SQLite persistence, cron-based scheduling, retries, approval workflow.
 - Automated tests (20 passing) + a real headless-browser UI smoke test.
+- **Production hardening** (added in a follow-up pass): single-user bearer
+  auth on every route, zod body validation, required-field validation at
+  the tool boundary, DNS-resolution-based SSRF protection, `helmet`
+  security headers, restricted CORS, per-route rate limiting, centralized
+  async error handling, graceful shutdown, Dockerfiles + docker-compose,
+  fail-fast production env checks. See `docs/SECURITY.md`.
 
 ## V1 (next)
 
-- Runtime input-schema validation at the tool boundary (zod), not just
-  declarative `inputSchema` metadata.
-- DNS-resolution-based SSRF protection for fetch tools.
-- Real authentication (single-user login) as the prerequisite for anything
-  beyond local use.
 - Real email delivery for `notify` (SMTP wiring, currently intentionally
   stubbed — see `docs/COSTS.md`).
 - Third planner template chosen from `docs/RESEARCH.md`'s problem inventory
@@ -26,6 +27,9 @@
   of the two shipped templates.
 - Usage tracking (model calls, tokens, execution time) per Section 33 of the
   brief — foundation for future plan tiers, not billing itself.
+- Full JSON-Schema/type-level validation of tool input *values* (today only
+  required-field presence is enforced — see `docs/SECURITY.md`).
+- Multi-user accounts (today's auth is single bearer-token, not per-user).
 
 ## V2
 

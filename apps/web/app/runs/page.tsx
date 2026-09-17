@@ -17,6 +17,13 @@ export default function RunsPage() {
       <h1>Runs</h1>
       <p className="subtitle">Execution history across all automations.</p>
       {error && <div className="error-box">{error}</div>}
+      {runs === null && !error && (
+        <>
+          <div className="skeleton" />
+          <div className="skeleton" />
+          <div className="skeleton" />
+        </>
+      )}
       {runs && runs.length === 0 && <div className="empty">No runs yet.</div>}
       {runs?.map((r) => (
         <Link key={r.id} href={`/runs/${r.id}`} className="list-item">

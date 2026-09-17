@@ -7,6 +7,14 @@ const browser = await chromium.launch({
 const page = await browser.newPage();
 
 await page.goto("http://localhost:3000/");
+
+// New: the app now requires a bearer token before showing anything else.
+await page.waitForSelector('input[type="password"]', { timeout: 10000 });
+await page.fill('input[type="password"]', process.env.ADMIN_TOKEN ?? "demo-token-abcdefghijklmnop");
+await page.getByRole("button", { name: "Connect" }).click();
+await page.waitForSelector("text=What do you want automated?", { timeout: 10000 });
+await page.screenshot({ path: "/tmp/ui-0-authed.png", fullPage: true });
+
 await page.fill("textarea", "Every day at 8am check https://pypi.org/ and notify me if anything changed");
 await page.click("text=Generate plan");
 await page.waitForSelector("text=Review & Activate", { timeout: 10000 });

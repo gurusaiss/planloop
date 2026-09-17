@@ -17,7 +17,9 @@ npm run dev:server            # http://localhost:4000, SQLite db at apps/server/
 
 On first boot it prints which AI provider it selected — with no API keys
 set, it's `local-heuristic` (zero cost, zero network calls; see
-`docs/COSTS.md`).
+`docs/COSTS.md`). It also prints a generated bearer token if you haven't
+set `ADMIN_TOKEN` — every API route except `/api/health` requires it (see
+`docs/SECURITY.md`).
 
 ## Run the frontend
 
@@ -26,7 +28,9 @@ npm run dev:web               # http://localhost:3000
 ```
 
 Set `NEXT_PUBLIC_API_URL` if the backend isn't on the default
-`http://localhost:4000`.
+`http://localhost:4000`. On first load the app asks for the bearer token
+from the server's log/`.env` — paste it in, it's stored in your browser's
+local storage.
 
 ## Run tests
 
@@ -53,3 +57,24 @@ sandbox this was built in had one pre-installed).
 The `file_organize` tool only ever touches paths under
 `apps/server/data/files/` (configurable via `FILE_TOOL_ROOT`) — put files
 you want it to organize inside a subfolder there.
+
+## Production build
+
+```bash
+npm run build:server                  # apps/server/dist/index.js
+NODE_ENV=production ADMIN_TOKEN=... node apps/server/dist/index.js
+npm run build --workspace apps/web    # apps/web/.next
+NODE_ENV=production npx next start --prefix apps/web -p 3000
+```
+
+`NODE_ENV=production` makes the server refuse to start without a real
+`ADMIN_TOKEN` (no silently-rotating generated token in production — see
+`docs/SECURITY.md`).
+
+## Docker
+
+`Dockerfile`s for both apps and a `docker-compose.yml` are included. They
+are written and reviewed for correctness but **not build-verified** in the
+environment this was developed in (no Docker daemon available there) — run
+`docker compose build && docker compose up` yourself before relying on
+them; see `MANUAL_STEPS.md`.
