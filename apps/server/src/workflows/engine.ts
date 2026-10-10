@@ -1,11 +1,11 @@
-import type { LlmProvider, ToolDefinition, WorkflowPlan, WorkflowStep } from "@automation/core";
+import type { ToolDefinition, UsageRecord, WorkflowPlan, WorkflowStep } from "@automation/core";
 import { db, newId } from "../db/index.js";
 import { buildToolRegistry } from "../tools/index.js";
+import { selectProviderForWorkspace } from "../providers/index.js";
 
 const MAX_ATTEMPTS = 3;
 
 export interface EngineDeps {
-  provider: LlmProvider;
   workspaceId: string;
   automationId: string;
 }
@@ -18,9 +18,16 @@ export interface EngineDeps {
  * medium/high risk step -> resume -> VERIFY (diff_snapshot /
  * schema-shaped tool outputs) -> RESULT. Nothing here ever auto-approves
  * a medium/high risk step.
+ *
+ * The AI provider is resolved per-workspace (selectProviderForWorkspace)
+ * at the start of each execution, not passed in by the caller — so a
+ * workspace that configures its own provider key gets it immediately on
+ * the next run, without the route layer needing to know about provider
+ * configs at all.
  */
 export async function runWorkflow(runId: string, plan: WorkflowPlan, deps: EngineDeps): Promise<void> {
-  const tools = buildToolRegistry(deps.provider, deps.workspaceId);
+  const provider = selectProviderForWorkspace(deps.workspaceId);
+  const tools = buildToolRegistry(provider);
   const outputs = new Map<string, unknown>();
 
   // Replay already-completed steps' outputs so resumed runs can still use
@@ -33,32 +40,37 @@ export async function runWorkflow(runId: string, plan: WorkflowPlan, deps: Engin
   }
   const alreadyDone = new Set(priorSteps.map((s) => s.step_id));
 
-  setRunStatus(runId, "running", { started: !hasStarted(runId) });
+  const runStartedAt = getStartedAt(runId);
+  setRunStatus(runId, "running", { started: !runStartedAt });
 
   for (const s of plan.steps) {
     if (alreadyDone.has(s.id)) continue;
 
     const effectiveRisk = maxRisk(s.riskLevel, s.tool ? tools.get(s.tool)?.riskLevel : undefined);
     if (s.kind === "approval" || effectiveRisk === "medium" || effectiveRisk === "high") {
-      const approval = getOrCreateApproval(runId, { ...s, riskLevel: effectiveRisk });
+      const approval = getOrCreateApproval(deps.workspaceId, runId, { ...s, riskLevel: effectiveRisk });
       if (approval.status !== "approved") {
         setRunStatus(runId, "pending_approval");
-        logStep(runId, s, "waiting_approval", { attempt: 1 });
+        logStep(deps.workspaceId, runId, s, "waiting_approval", { attempt: 1 });
         return; // pause; a later call to runWorkflow resumes from here
       }
     }
 
     const result = await executeStepWithRetry(s, outputs, tools, deps);
     if (!result.ok) {
-      logStep(runId, s, "failed", { attempt: result.attempt, error: result.error });
-      setRunStatus(runId, "failed", { result: { failedStep: s.id, error: result.error } });
+      logStep(deps.workspaceId, runId, s, "failed", { attempt: result.attempt, error: result.error, durationMs: result.durationMs });
+      finishRun(runId, "failed", runStartedAt, { failedStep: s.id, error: result.error });
       return;
     }
     outputs.set(s.id, result.output);
-    logStep(runId, s, "success", { attempt: result.attempt, output: result.output });
+    logStep(deps.workspaceId, runId, s, "success", { attempt: result.attempt, output: result.output, durationMs: result.durationMs });
   }
 
-  setRunStatus(runId, "succeeded", { result: { outputs: Object.fromEntries(outputs) } });
+  finishRun(runId, "succeeded", runStartedAt, { outputs: Object.fromEntries(outputs) });
+  db.prepare("UPDATE automations SET last_run_at = ?, run_count = run_count + 1 WHERE id = ?").run(
+    new Date().toISOString(),
+    deps.automationId
+  );
 }
 
 const RISK_RANK = { low: 0, medium: 1, high: 2 } as const;
@@ -78,7 +90,7 @@ function maxRisk(
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
 
-function getOrCreateApproval(runId: string, step: WorkflowStep) {
+function getOrCreateApproval(workspaceId: string, runId: string, step: WorkflowStep) {
   const existing = db
     .prepare("SELECT * FROM approvals WHERE run_id = ? AND step_id = ?")
     .get(runId, step.id) as any;
@@ -86,15 +98,18 @@ function getOrCreateApproval(runId: string, step: WorkflowStep) {
 
   const row = {
     id: newId("approval"),
+    workspace_id: workspaceId,
     run_id: runId,
     step_id: step.id,
+    label: step.label,
     risk_level: step.riskLevel,
     status: "pending",
     requested_at: new Date().toISOString(),
   };
   db.prepare(
-    `INSERT INTO approvals (id, run_id, step_id, risk_level, status, requested_at) VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(row.id, row.run_id, row.step_id, row.risk_level, row.status, row.requested_at);
+    `INSERT INTO approvals (id, workspace_id, run_id, step_id, label, risk_level, status, requested_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(row.id, row.workspace_id, row.run_id, row.step_id, row.label, row.risk_level, row.status, row.requested_at);
   return row;
 }
 
@@ -103,7 +118,11 @@ async function executeStepWithRetry(
   outputs: Map<string, unknown>,
   tools: Map<string, ToolDefinition>,
   deps: EngineDeps
-): Promise<{ ok: true; output: unknown; attempt: number } | { ok: false; error: string; attempt: number }> {
+): Promise<
+  | { ok: true; output: unknown; attempt: number; durationMs: number }
+  | { ok: false; error: string; attempt: number; durationMs: number }
+> {
+  const stepStartedAt = Date.now();
   let lastError = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -113,17 +132,22 @@ async function executeStepWithRetry(
         if (!tool) throw new Error(`Unknown tool: ${toolName}`);
         const input = interpolate(step.input ?? {}, outputs);
         assertRequiredFields(tool, input);
+
+        const usageEvents: UsageRecord[] = [];
         const output = await tool.run(input, {
           workspaceId: deps.workspaceId,
           automationId: deps.automationId,
           runId: "", // step-scoped ids are logged separately; kept simple for MVP
           stepId: step.id,
           credentials: {},
+          recordUsage: (event) => usageEvents.push(event),
         });
-        return { ok: true, output, attempt };
+        for (const event of usageEvents) recordUsage(deps.workspaceId, event);
+
+        return { ok: true, output, attempt, durationMs: Date.now() - stepStartedAt };
       }
-      // condition/loop/delay kinds are no-ops in the MVP engine.
-      return { ok: true, output: null, attempt };
+      // condition/loop/delay/parallel kinds are no-ops in the MVP engine.
+      return { ok: true, output: null, attempt, durationMs: Date.now() - stepStartedAt };
     } catch (err: any) {
       lastError = err?.message ?? String(err);
       if (attempt < MAX_ATTEMPTS) {
@@ -131,7 +155,23 @@ async function executeStepWithRetry(
       }
     }
   }
-  return { ok: false, error: lastError, attempt: MAX_ATTEMPTS };
+  return { ok: false, error: lastError, attempt: MAX_ATTEMPTS, durationMs: Date.now() - stepStartedAt };
+}
+
+function recordUsage(workspaceId: string, event: UsageRecord) {
+  db.prepare(
+    `INSERT INTO usage_events (id, workspace_id, kind, model, tokens_in, tokens_out, duration_ms, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    newId("usage"),
+    workspaceId,
+    event.kind,
+    event.model ?? null,
+    event.tokensIn ?? null,
+    event.tokensOut ?? null,
+    event.durationMs ?? null,
+    new Date().toISOString()
+  );
 }
 
 /**
@@ -181,43 +221,46 @@ function interpolate(input: Record<string, unknown>, outputs: Map<string, unknow
   return resolved;
 }
 
-function hasStarted(runId: string): boolean {
+function getStartedAt(runId: string): string | null {
   const row = db.prepare("SELECT started_at FROM runs WHERE id = ?").get(runId) as any;
-  return Boolean(row?.started_at);
+  return row?.started_at ?? null;
 }
 
-function setRunStatus(
-  runId: string,
-  status: string,
-  extra: { started?: boolean; result?: unknown } = {}
-) {
+function setRunStatus(runId: string, status: string, extra: { started?: boolean } = {}) {
   const now = new Date().toISOString();
   if (extra.started) {
     db.prepare("UPDATE runs SET status = ?, started_at = ? WHERE id = ?").run(status, now, runId);
-  } else if (status === "succeeded" || status === "failed") {
-    db.prepare("UPDATE runs SET status = ?, finished_at = ?, result_json = ? WHERE id = ?").run(
-      status,
-      now,
-      JSON.stringify(extra.result ?? {}),
-      runId
-    );
   } else {
     db.prepare("UPDATE runs SET status = ? WHERE id = ?").run(status, runId);
   }
 }
 
+function finishRun(runId: string, status: "succeeded" | "failed", startedAt: string | null, result: unknown) {
+  const now = new Date().toISOString();
+  const durationMs = startedAt ? Date.now() - new Date(startedAt).getTime() : null;
+  db.prepare("UPDATE runs SET status = ?, finished_at = ?, duration_ms = ?, result_json = ? WHERE id = ?").run(
+    status,
+    now,
+    durationMs,
+    JSON.stringify(result ?? {}),
+    runId
+  );
+}
+
 function logStep(
+  workspaceId: string,
   runId: string,
   step: WorkflowStep,
   status: "success" | "failed" | "skipped" | "waiting_approval",
-  extra: { attempt: number; output?: unknown; error?: string }
+  extra: { attempt: number; output?: unknown; error?: string; durationMs?: number }
 ) {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO run_steps (id, run_id, step_id, label, status, attempt, started_at, finished_at, output_json, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO run_steps (id, workspace_id, run_id, step_id, label, status, attempt, started_at, finished_at, duration_ms, output_json, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     newId("rs"),
+    workspaceId,
     runId,
     step.id,
     step.label,
@@ -225,6 +268,7 @@ function logStep(
     extra.attempt,
     now,
     status === "waiting_approval" ? null : now,
+    extra.durationMs ?? null,
     extra.output !== undefined ? JSON.stringify(extra.output) : null,
     extra.error ?? null
   );

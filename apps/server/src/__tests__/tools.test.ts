@@ -4,24 +4,20 @@ import path from "node:path";
 import { httpFetchTool } from "../tools/httpFetch.js";
 import { fileOrganizeTool } from "../tools/fileOrganize.js";
 import { diffSnapshotTool } from "../tools/diffSnapshot.js";
+import { notifyTool } from "../tools/notify.js";
 import { db } from "../db/index.js";
+import { seedTenant, seedAutomation } from "./helpers.js";
 
-function ensureAutomation(id: string) {
-  const now = new Date().toISOString();
-  db.prepare(
-    `INSERT OR IGNORE INTO automations (id, workspace_id, title, summary, plan_json, status, created_by, requires_approval, cron, created_at, updated_at)
-     VALUES (?, 'ws_default', 't', 's', '{}', 'active', 'ai', 0, NULL, ?, ?)`
-  ).run(id, now, now);
+function ctx(over: Partial<Parameters<typeof diffSnapshotTool.run>[1]> = {}) {
+  return {
+    workspaceId: "ws_test",
+    automationId: "auto_test",
+    runId: "run_test",
+    stepId: "step_test",
+    credentials: {},
+    ...over,
+  };
 }
-
-const ctx = (over: Partial<Parameters<typeof diffSnapshotTool.run>[1]> = {}) => ({
-  workspaceId: "ws_default",
-  automationId: "auto_test",
-  runId: "run_test",
-  stepId: "step_test",
-  credentials: {},
-  ...over,
-});
 
 describe("httpFetchTool", () => {
   it("refuses to fetch loopback/internal hosts (SSRF guard)", async () => {
@@ -74,8 +70,10 @@ describe("fileOrganizeTool", () => {
 
 describe("diffSnapshotTool", () => {
   it("reports changed=true on first run and false on an identical second run", async () => {
-    ensureAutomation("auto_diff_test");
-    const c = ctx({ automationId: "auto_diff_test" });
+    const { workspaceId, userId } = seedTenant();
+    const automationId = seedAutomation(workspaceId, userId);
+    const c = ctx({ workspaceId, automationId });
+
     const first = await diffSnapshotTool.run({ key: "https://x.example", content: "hello" }, c);
     expect(first.changed).toBe(true);
     expect(first.previous).toBeNull();
@@ -89,10 +87,31 @@ describe("diffSnapshotTool", () => {
   });
 
   it("keeps snapshots isolated per automation (tenant isolation for artifacts)", async () => {
-    ensureAutomation("auto_A");
-    ensureAutomation("auto_B");
-    await diffSnapshotTool.run({ key: "shared-key", content: "A's content" }, ctx({ automationId: "auto_A" }));
-    const b = await diffSnapshotTool.run({ key: "shared-key", content: "B's content" }, ctx({ automationId: "auto_B" }));
+    const { workspaceId, userId } = seedTenant();
+    const automationA = seedAutomation(workspaceId, userId);
+    const automationB = seedAutomation(workspaceId, userId);
+
+    await diffSnapshotTool.run({ key: "shared-key", content: "A's content" }, ctx({ workspaceId, automationId: automationA }));
+    const b = await diffSnapshotTool.run(
+      { key: "shared-key", content: "B's content" },
+      ctx({ workspaceId, automationId: automationB })
+    );
     expect(b.previous).toBeNull(); // automation B never sees automation A's snapshot
+  });
+});
+
+describe("notifyTool", () => {
+  it("records the notification and honestly reports that no email was sent without SMTP configured", async () => {
+    const { workspaceId, userId } = seedTenant();
+    const automationId = seedAutomation(workspaceId, userId);
+
+    const result = await notifyTool.run({ subject: "Test", body: "Hello" }, ctx({ workspaceId, automationId }));
+
+    expect(result.delivered).toBe(false);
+    expect(result.channel).toBe("log");
+    const row = db.prepare("SELECT * FROM notifications WHERE workspace_id = ?").get(workspaceId) as any;
+    expect(row).toBeDefined();
+    expect(row.subject).toBe("Test");
+    expect(row.user_id).toBe(userId); // addressed to the automation's creator
   });
 });

@@ -22,11 +22,11 @@ export function createSummarizeTool(provider: LlmProvider): ToolDefinition<Input
         instruction: { type: "string" },
       },
     },
-    async run(input) {
+    async run(input, ctx) {
       if (!input.text || input.text.trim().length === 0) {
         return { summary: "(no content to summarize)", provider: provider.name };
       }
-      const summary = await provider.complete([
+      const completion = await provider.complete([
         {
           role: "system",
           content:
@@ -35,7 +35,13 @@ export function createSummarizeTool(provider: LlmProvider): ToolDefinition<Input
         },
         { role: "user", content: input.text },
       ]);
-      return { summary, provider: provider.name };
+      ctx.recordUsage?.({
+        kind: "llm_call",
+        model: completion.model,
+        tokensIn: completion.tokensIn,
+        tokensOut: completion.tokensOut,
+      });
+      return { summary: completion.text, provider: provider.name };
     },
   };
 }

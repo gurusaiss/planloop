@@ -15,11 +15,13 @@ npm install                   # installs all workspaces (apps/web, apps/server, 
 npm run dev:server            # http://localhost:4000, SQLite db at apps/server/data/app.db
 ```
 
-On first boot it prints which AI provider it selected — with no API keys
-set, it's `local-heuristic` (zero cost, zero network calls; see
-`docs/COSTS.md`). It also prints a generated bearer token if you haven't
-set `ADMIN_TOKEN` — every API route except `/api/health` requires it (see
-`docs/SECURITY.md`).
+With no `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`GEMINI_API_KEY` set, the
+instance-wide AI provider fallback is the free, local, zero-network
+heuristic (see `docs/COSTS.md`). If you haven't set `JWT_SECRET`/
+`ENCRYPTION_KEY`, it generates them for this process only and logs a
+warning — fine for a quick local run, but sessions won't survive a restart
+and any encrypted provider-config keys won't be decryptable after one. Set
+real values in `.env` for anything you'll restart.
 
 ## Run the frontend
 
@@ -28,9 +30,9 @@ npm run dev:web               # http://localhost:3000
 ```
 
 Set `NEXT_PUBLIC_API_URL` if the backend isn't on the default
-`http://localhost:4000`. On first load the app asks for the bearer token
-from the server's log/`.env` — paste it in, it's stored in your browser's
-local storage.
+`http://localhost:4000`. Open the app and create an account — the first
+account ever created becomes the instance owner (admin-panel access); a
+personal workspace is created for you automatically.
 
 ## Run tests
 
@@ -62,14 +64,14 @@ you want it to organize inside a subfolder there.
 
 ```bash
 npm run build:server                  # apps/server/dist/index.js
-NODE_ENV=production ADMIN_TOKEN=... node apps/server/dist/index.js
+NODE_ENV=production JWT_SECRET=... ENCRYPTION_KEY=... node apps/server/dist/index.js
 npm run build --workspace apps/web    # apps/web/.next
 NODE_ENV=production npx next start --prefix apps/web -p 3000
 ```
 
 `NODE_ENV=production` makes the server refuse to start without a real
-`ADMIN_TOKEN` (no silently-rotating generated token in production — see
-`docs/SECURITY.md`).
+`JWT_SECRET` and `ENCRYPTION_KEY` (no silently-generated insecure fallback
+in production — see `docs/SECURITY.md`).
 
 ## Docker
 

@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@automation/core";
 import { db, newId } from "../db/index.js";
+import { sendMail } from "../lib/mailer.js";
 
 interface Input {
   subject: string;
@@ -12,50 +13,52 @@ interface Output {
 }
 
 /**
- * Sends a notification. If SMTP env vars are configured, a real email tool
- * can be swapped in later behind this same interface. For zero-cost local
- * development there is no SMTP account available, so this tool honestly
- * records the notification to the database/notifications log instead of
- * pretending to send an email — see docs/TOOLS.md.
+ * Sends a notification to the user who created the automation. If SMTP is
+ * configured (see lib/mailer.ts), this sends a real email; either way the
+ * notification is always recorded to the notifications table so it shows
+ * up in the app regardless of email delivery — see docs/TOOLS.md.
  */
-export function createNotifyTool(workspaceId: string): ToolDefinition<Input, Output> {
-  return {
-    name: "notify",
-    description: "Deliver a notification to the user (email if configured, otherwise a local notification log).",
-    riskLevel: "high", // treated as an external, user-visible action
-    inputSchema: {
-      type: "object",
-      required: ["subject", "body"],
-      properties: {
-        subject: { type: "string" },
-        body: { type: "string" },
-      },
+export const notifyTool: ToolDefinition<Input, Output> = {
+  name: "notify",
+  description: "Notify the automation's owner (email if SMTP is configured, always recorded in-app).",
+  riskLevel: "high", // treated as an external, user-visible action
+  inputSchema: {
+    type: "object",
+    required: ["subject", "body"],
+    properties: {
+      subject: { type: "string" },
+      body: { type: "string" },
     },
-    async run(input) {
-      const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.NOTIFY_EMAIL_TO);
-      const channel = smtpConfigured ? "email" : "log";
+  },
+  async run(input, ctx) {
+    const automation = db
+      .prepare("SELECT created_by_user_id FROM automations WHERE id = ?")
+      .get(ctx.automationId) as { created_by_user_id: string } | undefined;
+    const recipient = automation
+      ? (db.prepare("SELECT email FROM users WHERE id = ?").get(automation.created_by_user_id) as
+          | { email: string }
+          | undefined)
+      : undefined;
 
-      db.prepare(
-        `INSERT INTO notifications (id, workspace_id, channel, subject, body, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(newId("notif"), workspaceId, channel, input.subject, input.body, new Date().toISOString());
+    const mailResult = recipient
+      ? await sendMail({ to: recipient.email, subject: input.subject, text: input.body })
+      : { delivered: false, detail: "No recipient on file for this automation." };
 
-      if (smtpConfigured) {
-        // Real SMTP delivery intentionally not wired up in the MVP (no
-        // credentials available in a zero-cost dev environment). Flagged
-        // clearly here rather than faked.
-        return {
-          channel,
-          delivered: false,
-          detail: "SMTP configured but delivery not implemented in MVP; recorded to notifications log.",
-        };
-      }
+    db.prepare(
+      `INSERT INTO notifications (id, workspace_id, user_id, run_id, channel, subject, body, delivered, delivery_error, created_at)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      newId("notif"),
+      ctx.workspaceId,
+      automation?.created_by_user_id ?? null,
+      mailResult.delivered ? "email" : "log",
+      input.subject,
+      input.body,
+      mailResult.delivered ? 1 : 0,
+      mailResult.delivered ? null : mailResult.detail,
+      new Date().toISOString()
+    );
 
-      return {
-        channel,
-        delivered: true,
-        detail: "Recorded to local notifications log (no SMTP configured).",
-      };
-    },
-  };
-}
+    return { channel: mailResult.delivered ? "email" : "log", delivered: mailResult.delivered, detail: mailResult.detail };
+  },
+};

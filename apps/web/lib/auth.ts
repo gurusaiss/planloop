@@ -1,31 +1,54 @@
-const KEY = "automation_platform_token";
+// Session storage — localStorage-backed, per-browser. This is appropriate
+// for this app's model (a short-lived JWT access token + a rotating opaque
+// refresh token, both bearer tokens sent in headers, never cookies), but it
+// is readable by any script on the page, so it is not a substitute for
+// httpOnly-cookie sessions in a deployment that must defend against XSS
+// reading localStorage — see docs/SECURITY.md.
 
-// The backend token lives in localStorage — a per-viewer convenience store,
-// not shared or synced anywhere. This is appropriate for the MVP's
-// single-user model (one bearer token, no per-user accounts yet — see
-// docs/SECURITY.md); it is not a substitute for real session auth once
-// multiple users exist.
-export function getToken(): string | null {
+const ACCESS_KEY = "ap_access_token";
+const REFRESH_KEY = "ap_refresh_token";
+const WORKSPACE_KEY = "ap_active_workspace";
+
+function safeGet(key: string): string | null {
   try {
-    return localStorage.getItem(KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
-
-export function setToken(token: string) {
+function safeSet(key: string, value: string) {
   try {
-    localStorage.setItem(KEY, token);
+    localStorage.setItem(key, value);
   } catch {
-    // Private browsing / blocked storage — the token simply won't persist
-    // across reloads; the app still works for the current page load.
+    // ignore (private browsing / blocked storage)
   }
 }
-
-export function clearToken() {
+function safeRemove(key: string) {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(key);
   } catch {
     // ignore
   }
+}
+
+export function getAccessToken(): string | null {
+  return safeGet(ACCESS_KEY);
+}
+export function getRefreshToken(): string | null {
+  return safeGet(REFRESH_KEY);
+}
+export function getActiveWorkspaceId(): string | null {
+  return safeGet(WORKSPACE_KEY);
+}
+export function setActiveWorkspaceId(id: string) {
+  safeSet(WORKSPACE_KEY, id);
+}
+export function setSession(tokens: { accessToken: string; refreshToken: string }) {
+  safeSet(ACCESS_KEY, tokens.accessToken);
+  safeSet(REFRESH_KEY, tokens.refreshToken);
+}
+export function clearSession() {
+  safeRemove(ACCESS_KEY);
+  safeRemove(REFRESH_KEY);
+  safeRemove(WORKSPACE_KEY);
 }

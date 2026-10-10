@@ -1,21 +1,24 @@
 import cron from "node-cron";
-import type { LlmProvider, WorkflowPlan } from "@automation/core";
-import { db, newId, DEFAULT_WORKSPACE_ID } from "../db/index.js";
+import type { WorkflowPlan } from "@automation/core";
+import { db, newId } from "../db/index.js";
 import { runWorkflow } from "../workflows/engine.js";
 
 const scheduled = new Map<string, cron.ScheduledTask>();
 
 /**
- * Polls the automations table every minute for active, cron-triggered
- * automations and (re)registers node-cron jobs. Polling (rather than a
- * one-time boot-time scan) means a newly activated automation is picked up
- * without a server restart, and a paused one stops firing within a minute.
+ * Polls the automations table every minute, across every workspace, for
+ * active cron-triggered automations and (re)registers node-cron jobs.
+ * Polling (rather than a one-time boot-time scan) means a newly activated
+ * automation is picked up without a server restart, and a paused one stops
+ * firing within a minute. Each automation's own `workspace_id` drives which
+ * workspace's AI provider config and tenant-scoped data its run uses — the
+ * scheduler itself is instance-wide, not workspace-scoped.
  */
-export function startScheduler(provider: LlmProvider) {
+export function startScheduler() {
   const sync = () => {
     const active = db
-      .prepare("SELECT * FROM automations WHERE workspace_id = ? AND status = 'active' AND cron IS NOT NULL")
-      .all(DEFAULT_WORKSPACE_ID) as any[];
+      .prepare("SELECT * FROM automations WHERE status = 'active' AND cron IS NOT NULL AND deleted_at IS NULL")
+      .all() as any[];
 
     const activeIds = new Set(active.map((a) => a.id));
     for (const [id, task] of scheduled) {
@@ -28,7 +31,9 @@ export function startScheduler(provider: LlmProvider) {
     for (const automation of active) {
       if (scheduled.has(automation.id)) continue;
       if (!cron.validate(automation.cron)) continue;
-      const task = cron.schedule(automation.cron, () => triggerRun(automation, provider));
+      const task = cron.schedule(automation.cron, () => triggerRun(automation), {
+        timezone: automation.timezone || "UTC",
+      });
       scheduled.set(automation.id, task);
     }
   };
@@ -37,7 +42,7 @@ export function startScheduler(provider: LlmProvider) {
   setInterval(sync, 60_000);
 }
 
-function triggerRun(automation: any, provider: LlmProvider) {
+function triggerRun(automation: any) {
   // Idempotency guard: skip if a run for this automation is already in
   // flight, so a slow previous run can't overlap with the next tick.
   const inFlight = db
@@ -52,12 +57,9 @@ function triggerRun(automation: any, provider: LlmProvider) {
   db.prepare(
     `INSERT INTO runs (id, workspace_id, automation_id, status, trigger_type, created_at)
      VALUES (?, ?, ?, 'queued', 'schedule', ?)`
-  ).run(runId, DEFAULT_WORKSPACE_ID, automation.id, new Date().toISOString());
+  ).run(runId, automation.workspace_id, automation.id, new Date().toISOString());
 
-  runWorkflow(runId, plan, { provider, workspaceId: DEFAULT_WORKSPACE_ID, automationId: automation.id }).catch((err) => {
-    db.prepare("UPDATE runs SET status = 'failed', result_json = ? WHERE id = ?").run(
-      JSON.stringify({ error: String(err) }),
-      runId
-    );
+  runWorkflow(runId, plan, { workspaceId: automation.workspace_id, automationId: automation.id }).catch((err) => {
+    db.prepare("UPDATE runs SET status = 'failed', error = ? WHERE id = ?").run(String(err), runId);
   });
 }

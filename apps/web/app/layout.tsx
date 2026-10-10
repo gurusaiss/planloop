@@ -1,6 +1,6 @@
 import "./globals.css";
-import AuthGate from "@/components/AuthGate";
-import NavBar from "@/components/NavBar";
+import { AuthProvider } from "@/lib/AuthContext";
+import Shell from "@/components/Shell";
 
 export const metadata = {
   title: "Automation Platform",
@@ -11,10 +11,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AuthGate>
-          <NavBar />
-          <main className="shell">{children}</main>
-        </AuthGate>
+        <AuthProvider>
+          <Shell>{children}</Shell>
+        </AuthProvider>
       </body>
     </html>
   );

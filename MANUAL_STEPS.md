@@ -15,52 +15,57 @@ actually want to (a) use a real AI provider, (b) send real emails, or
 
 The local provider is honest-but-basic (extractive summarization, not a
 real model). To get real natural-language understanding and better
-summaries:
+summaries, either as the instance-wide default or per-workspace:
 
+**Per-workspace** (no restart needed): open **Settings → AI Providers** in
+the app, paste an API key for OpenAI/Anthropic/Gemini, and mark it default.
+That workspace now uses it immediately.
+
+**Instance-wide default** (used by any workspace that hasn't configured
+its own):
 1. Get an API key from **one** of:
    - OpenAI: https://platform.openai.com/api-keys
    - Anthropic: https://console.anthropic.com/settings/keys
    - Google Gemini: https://aistudio.google.com/apikey
-2. Put it in your `.env` as `OPENAI_API_KEY=...` (or the matching var for
-   your chosen provider).
-3. Restart the server. It auto-detects and switches — check the startup
-   log line `[startup] AI provider: ...`.
-
-You do not need to touch any code for this.
+2. Put it in your `.env` as `OPENAI_API_KEY=...` (or the matching var).
+3. Restart the server.
 
 ## 3. Before running anywhere other than your own machine
 
-This is the one that matters most — the app now requires it.
+These two matter most — the app refuses to start in production without them.
 
-1. **Generate a real `ADMIN_TOKEN`**:
+1. **Generate real secrets**:
    ```bash
-   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"   # JWT_SECRET
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"      # ENCRYPTION_KEY
    ```
-   Put the result in `.env` as `ADMIN_TOKEN=...`. If you skip this, the
-   server generates a random one and prints it to its own log every
-   restart — fine for a quick local test, **not** fine for anything you'll
-   restart or that other people might connect to (the token changes every
-   restart, silently locking out whoever had the old one).
+   Put both in `.env`. Without `JWT_SECRET`, sessions reset on every
+   restart. Without `ENCRYPTION_KEY`, any workspace AI-provider key someone
+   saves won't survive a restart either (it can't be decrypted with a
+   freshly-generated dev key). Set `NODE_ENV=production` and the server
+   will refuse to boot rather than run insecurely if either is missing.
 2. **Set `CORS_ORIGIN`** to the actual URL your frontend will be served
    from (e.g. `https://automations.yourdomain.com`). It defaults to
    `http://localhost:3000` and the API will reject browser requests from
    any other origin.
-3. When you open the frontend for the first time, it will ask for that
-   bearer token (a "Connect to your automation server" screen) — paste the
-   `ADMIN_TOKEN` value. It's stored in your browser's local storage, not
-   sent anywhere else.
+3. **Set `APP_URL`** to your real frontend URL — it's used to build the
+   links inside password-reset and workspace-invite emails.
+4. Create your account normally (register) — the very first account on a
+   fresh instance becomes the instance owner with admin-panel access.
+   There is no separate admin bootstrap step.
 
-## 4. If you want real email notifications (optional)
+## 4. If you want real email (password resets, invites, notifications)
 
-Right now the `notify` tool honestly logs to an internal table instead of
-sending email — see `docs/TOOLS.md`. To make it real, you'd need to:
+Without SMTP configured, the app is still fully functional — it honestly
+reports that no email was sent and gives you the link/token to share
+manually (shown directly in the UI for invites, logged server-side for
+password resets). To send real email:
 1. Get SMTP credentials from a provider (e.g. a free tier of Resend,
    SendGrid, Mailgun, or your own mail server).
-2. This requires a small code change (wiring `nodemailer` or an HTTP email
-   API into `apps/server/src/tools/notify.ts`) — it was deliberately left
-   unbuilt rather than half-built, per the "no fake functionality" rule.
-   Tell me when you want this and I'll implement it against whichever
-   provider you pick.
+2. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in
+   `.env`. No code changes needed — `lib/mailer.ts` picks it up automatically
+   and is already wired into password reset, workspace invites, and the
+   `notify` tool.
 
 ## 5. Choosing where to actually deploy it
 
@@ -119,18 +124,19 @@ instruction. When you're ready:
 - Pricing model, if you intend to charge anyone (see `docs/PRODUCT.md` for
   the research-backed recommendation: transparent execution-based pricing,
   not opaque credits).
-- Whether/when to invest in real multi-tenancy (Postgres + RLS) — only
-  needed once more than one person/organization uses the same deployment.
+- Whether/when to move off SQLite to Postgres — only needed at a scale
+  where a single-writer SQLite file becomes a bottleneck (real
+  multi-tenancy is already implemented on top of SQLite today).
 - Whether to open-source it (an explicit differentiation angle per the
   research — "self-hosted" is a credible trust signal against cloud-only
   competitors).
 
 ## Summary checklist
 
-- [ ] Decide if you want a real AI provider; add its API key if so
-- [ ] Generate and set a real `ADMIN_TOKEN`
-- [ ] Set `CORS_ORIGIN` to your real frontend URL
-- [ ] Decide on email sending; tell me if/when to implement it for real
+- [ ] Decide if you want a real AI provider; add its API key if so (instance-wide or per-workspace)
+- [ ] Generate and set a real `JWT_SECRET` and `ENCRYPTION_KEY`
+- [ ] Set `CORS_ORIGIN` and `APP_URL` to your real frontend URL
+- [ ] Decide on real SMTP for invites/password-reset/notification emails
 - [ ] Pick a hosting provider for the backend (Docker + persistent volume)
 - [ ] Pick a hosting provider for the frontend (Vercel is the easy default)
 - [ ] Actually run `docker compose build && docker compose up` once,

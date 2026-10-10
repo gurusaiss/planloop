@@ -10,10 +10,17 @@ services:
       PORT: 4000
       DATABASE_PATH: /repo/apps/server/data/app.db
       FILE_TOOL_ROOT: /repo/apps/server/data/files
-      # Required — see .env.example for how to generate one. Compose will
-      # refuse to start the container without this set (no insecure default).
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN must be set — see .env.example}
+      # Required — see .env.example for how to generate these. The server
+      # refuses to start in production without them (no insecure default).
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set — see .env.example}
+      APP_URL: ${APP_URL:-http://localhost:3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       AI_PROVIDER: ${AI_PROVIDER:-local}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

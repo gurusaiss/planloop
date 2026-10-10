@@ -1,0 +1,224 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { api } from "@/lib/api";
+
+type Tab = "overview" | "users" | "workspaces" | "audit" | "usage";
+
+export default function AdminPage() {
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>("overview");
+
+  if (user && user.role !== "owner" && user.role !== "admin") {
+    return (
+      <>
+        <h1>Admin</h1>
+        <div className="error-box">You don&apos;t have system admin access.</div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1>Admin</h1>
+      <p className="subtitle">Instance-wide: every user and workspace, not just the one you&apos;re in.</p>
+
+      <div className="row" style={{ marginBottom: 20, flexWrap: "wrap" }}>
+        {(["overview", "users", "workspaces", "audit", "usage"] as Tab[]).map((t) => (
+          <button key={t} className={tab === t ? "" : "secondary"} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && <Overview />}
+      {tab === "users" && <Users currentUserId={user?.id} currentUserRole={user?.role} />}
+      {tab === "workspaces" && <Workspaces />}
+      {tab === "audit" && <AuditLog />}
+      {tab === "usage" && <Usage />}
+    </>
+  );
+}
+
+function Overview() {
+  const [stats, setStats] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.admin.stats().then(setStats).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="error-box">{error}</div>;
+  if (!stats) return <div className="skeleton" />;
+
+  const tiles: [string, number][] = [
+    ["Users", stats.users],
+    ["Active users", stats.activeUsers],
+    ["Workspaces", stats.workspaces],
+    ["Automations", stats.automations],
+    ["Runs total", stats.runsTotal],
+    ["Runs succeeded", stats.runsSucceeded],
+    ["Runs failed", stats.runsFailed],
+    ["Pending approvals", stats.pendingApprovals],
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+      {tiles.map(([label, value]) => (
+        <div className="card" key={label} style={{ marginTop: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 600 }}>{value}</div>
+          <div style={{ fontSize: 13, color: "#9aa1ab" }}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Users({ currentUserId, currentUserRole }: { currentUserId?: string; currentUserRole?: string }) {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    api.admin.listUsers().then(setData).catch((e) => setError(e.message));
+  }
+  useEffect(load, []);
+
+  async function setStatus(id: string, status: "active" | "suspended") {
+    try {
+      await api.admin.updateUserStatus(id, status);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+  async function setRole(id: string, role: string) {
+    try {
+      await api.admin.updateUserRole(id, role);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  if (error) return <div className="error-box">{error}</div>;
+  if (!data) return <div className="skeleton" />;
+
+  return (
+    <div className="card">
+      <h2>Users ({data.total})</h2>
+      {data.items.map((u: any) => (
+        <div className="step" key={u.id}>
+          <div style={{ flex: 1 }}>
+            <div>{u.name} {u.id === currentUserId && <span style={{ color: "#9aa1ab" }}>(you)</span>}</div>
+            <div style={{ fontSize: 12, color: "#9aa1ab" }}>{u.email} · joined {new Date(u.created_at).toLocaleDateString()}</div>
+          </div>
+          <select
+            value={u.role}
+            disabled={u.id === currentUserId || (u.role === "owner" && currentUserRole !== "owner")}
+            onChange={(e) => setRole(u.id, e.target.value)}
+            style={{ background: "#14171c", color: "#e8eaed", border: "1px solid #23272e", borderRadius: 6, padding: "4px 8px", marginRight: 8 }}
+          >
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+            {currentUserRole === "owner" && <option value="owner">owner</option>}
+          </select>
+          <span className={`status ${u.status === "active" ? "succeeded" : "failed"}`} style={{ marginRight: 8 }}>{u.status}</span>
+          {u.id !== currentUserId && (
+            <button
+              className={u.status === "active" ? "danger" : "secondary"}
+              onClick={() => setStatus(u.id, u.status === "active" ? "suspended" : "active")}
+            >
+              {u.status === "active" ? "Suspend" : "Activate"}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Workspaces() {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.admin.listWorkspaces().then(setData).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="error-box">{error}</div>;
+  if (!data) return <div className="skeleton" />;
+
+  return (
+    <div className="card">
+      <h2>Workspaces ({data.total})</h2>
+      {data.items.map((w: any) => (
+        <div className="step" key={w.id}>
+          <div style={{ flex: 1 }}>
+            <div>{w.name}</div>
+            <div style={{ fontSize: 12, color: "#9aa1ab" }}>
+              {w.member_count} member{w.member_count === 1 ? "" : "s"} · {w.automation_count} automation
+              {w.automation_count === 1 ? "" : "s"} · created {new Date(w.created_at).toLocaleDateString()}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AuditLog() {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.admin.auditLog().then(setData).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="error-box">{error}</div>;
+  if (!data) return <div className="skeleton" />;
+
+  return (
+    <div className="card">
+      <h2>Audit log ({data.total})</h2>
+      {data.items.map((a: any) => (
+        <div className="step" key={a.id}>
+          <div style={{ flex: 1 }}>
+            <span className="mono">{a.action}</span>{" "}
+            <span style={{ color: "#9aa1ab" }}>
+              {a.user_email && `by ${a.user_email}`} {a.workspace_name && `in ${a.workspace_name}`}
+            </span>
+          </div>
+          <span style={{ fontSize: 12, color: "#9aa1ab" }}>{new Date(a.created_at).toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Usage() {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.admin.usage().then(setData).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="error-box">{error}</div>;
+  if (!data) return <div className="skeleton" />;
+  if (data.length === 0) return <p className="empty">No usage recorded yet.</p>;
+
+  return (
+    <div className="card">
+      <h2>Usage by workspace</h2>
+      {data.map((row: any, i: number) => (
+        <div className="step" key={i}>
+          <div style={{ flex: 1 }}>
+            {row.workspace_name} · <span className="mono">{row.kind}</span>
+          </div>
+          <span style={{ fontSize: 12, color: "#9aa1ab" }}>
+            {row.events} events
+            {row.tokens_in || row.tokens_out ? ` · ${row.tokens_in ?? 0} in / ${row.tokens_out ?? 0} out tokens` : ""}
+            {row.duration_ms ? ` · ${Math.round(row.duration_ms / 1000)}s` : ""}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}

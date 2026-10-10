@@ -21,31 +21,44 @@ report for `git status` and confirmation of that.
 
 ```bash
 npm install
-npm run dev:server   # http://localhost:4000 — prints a bearer token to the log on first run
+npm run dev:server   # http://localhost:4000
 npm run dev:web       # http://localhost:3000 (separate terminal)
 ```
 
-Open `http://localhost:3000` and paste the bearer token from the server's
-startup log when prompted (the API requires it — see `docs/SECURITY.md`).
+Open `http://localhost:3000` and create an account — a personal workspace
+is created for you automatically. The first account ever created on a
+fresh install becomes the instance owner, with access to the admin panel.
 See `docs/SETUP.md` for details, `docs/API.md` for the HTTP API, and
 `MANUAL_STEPS.md` for what you need to do before deploying it anywhere.
 
 ## What's actually implemented
 
+- Real accounts: email/password with hashed storage, JWT + rotating
+  refresh-token sessions, lockout after repeated failed logins, password
+  reset, workspace invites by email — see `docs/SECURITY.md`.
+- Multi-tenant workspaces: each with its own members/roles
+  (owner/admin/member/viewer), API keys, and AI provider configuration —
+  switch between workspaces you belong to from the nav bar.
+- Instance admin panel: every user and workspace, suspend/activate/promote
+  users, a real audit log, and usage stats — gated by system role, not
+  workspace role.
 - Natural-language → plan (two supported templates: website monitoring
   with change detection, and file organization) — see `docs/WORKFLOWS.md`.
 - Risk-classified steps with an approval gate the engine enforces
   independently of the planner (defense in depth) — see `docs/ARCHITECTURE.md`.
 - Real tools: HTTP fetch + extraction, real headless-browser snapshotting
   (Playwright), deterministic change detection, text summarization,
-  sandboxed file organization, notification logging — see `docs/TOOLS.md`.
-- Provider-agnostic AI layer: works with zero API keys (local heuristic
-  provider) or with OpenAI/Anthropic/Gemini if configured — see
+  sandboxed file organization, notifications (real email via SMTP if
+  configured, otherwise an honest in-app log) — see `docs/TOOLS.md`.
+- Provider-agnostic AI layer, configurable per-workspace: works with zero
+  API keys (local heuristic provider) or with OpenAI/Anthropic/Gemini,
+  either as an instance-wide default or per-workspace override — see
   `docs/AGENTS.md`.
 - Cron-based scheduling with overlap prevention, retries with backoff,
   and a full execution log per run.
-- 20 automated tests + a real headless-browser UI smoke test — see
-  `docs/TESTING.md`.
+- 53 automated tests (including real HTTP integration tests of the entire
+  auth/tenancy system) + a real headless-browser UI smoke test covering
+  every page — see `docs/TESTING.md`.
 
 ## Documentation map
 

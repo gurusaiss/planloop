@@ -102,7 +102,16 @@ export async function planFromText(input: {
 
   const rationale = await buildRationale(provider, text, templateUsed, plan);
 
-  return { plan, rationale };
+  return {
+    plan,
+    // The plan's STEPS are always deterministic/template-based (see the
+    // file header) regardless of provider — only the rationale text can
+    // come from an LLM. Labeling this "llm" when a real provider is
+    // configured would overstate what it actually decided.
+    rationale,
+    source: templateUsed === "unsupported" ? "unsupported" : "template",
+    templateId: templateUsed,
+  };
 }
 
 function step(
@@ -148,7 +157,7 @@ async function buildRationale(
     }`;
   }
   try {
-    return await provider.complete([
+    const completion = await provider.complete([
       {
         role: "system",
         content:
@@ -159,6 +168,7 @@ async function buildRationale(
         content: `User request: "${originalText}"\n\nPlanned steps:\n${plan.summary}\n\nExplain why this plan satisfies the request.`,
       },
     ]);
+    return completion.text;
   } catch {
     return `Matched template "${templateUsed}".`;
   }

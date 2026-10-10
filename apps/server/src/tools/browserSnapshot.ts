@@ -41,8 +41,9 @@ export const browserSnapshotTool: ToolDefinition<Input, Output> = {
       waitForMs: { type: "number" },
     },
   },
-  async run(input) {
+  async run(input, ctx) {
     const parsed = await assertPublicUrl(input.url);
+    const startedAt = Date.now();
 
     const browser = await getBrowser();
     const context = await browser.newContext();
@@ -62,6 +63,7 @@ export const browserSnapshotTool: ToolDefinition<Input, Output> = {
       };
     } finally {
       await context.close();
+      ctx.recordUsage?.({ kind: "browser_ms", durationMs: Date.now() - startedAt });
     }
   },
 };

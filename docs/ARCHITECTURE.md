@@ -6,28 +6,40 @@
 USER (browser)
   |
   v
-Next.js web app (apps/web)  --fetch-->  Express API (apps/server)
+Next.js web app (apps/web)  --fetch-->  Express API (apps/server)  [app.ts]
                                               |
-                                              v
-                                    ┌─────────────────────┐
-                                    │   Planner Agent      │  agents/planner.ts
-                                    │ (deterministic rules │
-                                    │  + optional LLM text)│
-                                    └─────────┬───────────┘
-                                              v
-                                    ┌─────────────────────┐
-                                    │  Workflow Engine     │  workflows/engine.ts
-                                    │  step loop + retries │
-                                    │  + approval gate      │
-                                    └───┬─────────┬────────┘
-                                        v         v
-                              ┌────────────┐ ┌───────────────┐
-                              │ Tool        │ │  Scheduler     │  scheduler/index.ts
-                              │ Registry    │ │  (node-cron,   │
-                              │ tools/*.ts  │ │  poll every 60s│
-                              └─────┬───────┘ └───────────────┘
-                                    v
-                        SQLite (better-sqlite3) — apps/server/data/app.db
+                                   requireAuth (JWT or API key)
+                                   resolves {userId, systemRole,
+                                   workspaceId, workspaceRole}
+                                              |
+                      ┌───────────────┬───────┴────────┬──────────────┐
+                      v               v                v              v
+              auth/workspaces/   automations/     provider-configs/  admin/*
+              api-keys/invites   runs (core loop)                   (owner/admin,
+                                        |                             own mount
+                                        v                             prefix)
+                              ┌─────────────────────┐
+                              │   Planner Agent      │  agents/planner.ts
+                              │ (deterministic rules │
+                              │  + optional LLM text)│
+                              └─────────┬───────────┘
+                                        v
+                              ┌─────────────────────┐
+                              │  Workflow Engine     │  workflows/engine.ts
+                              │  resolves the        │
+                              │  workspace's own AI   │
+                              │  provider, step loop, │
+                              │  retries, approval gate│
+                              └───┬─────────┬────────┘
+                                  v         v
+                        ┌────────────┐ ┌───────────────┐
+                        │ Tool        │ │  Scheduler     │  scheduler/index.ts
+                        │ Registry    │ │  (node-cron,   │  (instance-wide,
+                        │ tools/*.ts  │ │  poll every 60s│  per-automation
+                        └─────┬───────┘ └───────────────┘  workspace_id)
+                              v
+                  SQLite (better-sqlite3) — apps/server/data/app.db
+                  every table carries workspace_id
 ```
 
 There is one LLM-facing seam (`LlmProvider`) and one tool-facing seam
@@ -87,20 +99,41 @@ built against those two interfaces.
    deterministically decides "did anything actually change" instead of
    trusting the LLM summary to have judged that correctly.
 
+## Authentication & multi-tenancy
+
+Every table in `db/schema.sql` carries `workspace_id`, and every route
+scopes its queries by `req.auth.workspaceId` — a value `middleware/auth.ts`
+resolves fresh on every request (from a JWT + the `X-Workspace-Id` header,
+or from an API key tied to one workspace at creation), never cached in the
+token. This means a role change, workspace switch, or account suspension
+takes effect on the caller's *very next request*, not whenever a token
+happens to expire.
+
+Two independent role axes:
+- **System role** (`owner`/`admin`/`member` on the `users` table) gates the
+  instance-wide `/api/admin/*` panel — every user, every workspace.
+- **Workspace role** (`owner`/`admin`/`member`/`viewer` on
+  `workspace_members`) gates what you can do *inside* one workspace.
+
+`routes/admin.ts` is mounted at its own `/api/admin` prefix rather than the
+shared bare `/api` every other router uses — see `docs/SECURITY.md` for why
+that distinction mattered in practice (a real router-ordering bug a test
+caught, not a hypothetical).
+
 ## Security boundaries (see docs/SECURITY.md for the full threat model)
 
 - `http_fetch_extract`/`browser_snapshot` refuse loopback/internal
-  hostnames (basic SSRF guard) and non-http(s) schemes.
+  hostnames and resolve DNS to catch a public hostname resolving to a
+  private IP (SSRF guard, `tools/ssrfGuard.ts`).
 - `file_organize` resolves every path and refuses anything that resolves
   outside a single sandboxed root directory (`FILE_TOOL_ROOT`).
 - Medium/high-risk steps cannot execute without an explicit `approved`
   decision recorded in the `approvals` table — enforced by the engine, not
-  just by planner-assigned labels (see the `maxRisk` safety net in
-  `workflows/engine.ts`, added after a real test caught the gap — see
-  `engine.test.ts`).
-- API keys/credentials are read from `process.env` only; nothing is
-  persisted in plaintext in the database, and nothing is sent to the
-  frontend.
+  just by planner-assigned labels (the `maxRisk` safety net in
+  `workflows/engine.ts`).
+- Passwords are hashed with `scrypt`; workspace AI-provider API keys and
+  the platform's own `sk_...` API keys are encrypted/hashed at rest
+  (`lib/crypto.ts`) — see `docs/SECURITY.md`.
 
 ## Extensibility seams (Section 34 of the brief)
 
@@ -113,14 +146,14 @@ built against those two interfaces.
 
 ## Known architectural limitations (honest, not hidden)
 
-- Single default workspace (`ws_default`); the schema supports
-  multi-tenancy, the API/auth layer does not enforce it yet — see
-  `docs/ROADMAP.md`.
-- No authentication — anyone who can reach the API can create/run
-  automations. Fine for local-only MVP use, not for any shared deployment.
 - The workflow engine executes steps strictly in sequence; `condition`,
-  `loop`, and `delay` step kinds exist in the type system but are no-ops in
-  the MVP engine (see `docs/WORKFLOWS.md`).
+  `loop`, `parallel`, and `delay` step kinds exist in the type system but
+  are no-ops in the engine (see `docs/WORKFLOWS.md`).
 - The planner supports exactly two templates (website-monitor,
   file-organize); anything else returns an honest "manual review needed"
   plan rather than guessing.
+- No 2FA (schema has reserved, unused `totp_*` columns — see docs/SECURITY.md).
+- Rate limiting and the scheduler are per-process/in-memory — fine for a
+  single server instance, not yet horizontally scaled.
+- No full JSON-Schema value validation for tool inputs (required-field
+  presence only).

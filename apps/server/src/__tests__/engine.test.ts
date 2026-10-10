@@ -1,25 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { db, newId, DEFAULT_WORKSPACE_ID } from "../db/index.js";
+import { describe, it, expect } from "vitest";
+import { db } from "../db/index.js";
 import { runWorkflow } from "../workflows/engine.js";
-import { localProvider } from "../providers/local.js";
+import { seedTenant, seedAutomation, seedRun } from "./helpers.js";
 import type { WorkflowPlan } from "@automation/core";
-
-function insertAutomation(plan: WorkflowPlan) {
-  const id = newId("auto");
-  db.prepare(
-    `INSERT INTO automations (id, workspace_id, title, summary, plan_json, status, created_by, requires_approval, cron, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'active', 'ai', ?, NULL, ?, ?)`
-  ).run(id, DEFAULT_WORKSPACE_ID, plan.title, plan.summary, JSON.stringify(plan), plan.requiresApproval ? 1 : 0, new Date().toISOString(), new Date().toISOString());
-  return id;
-}
-
-function insertRun(automationId: string) {
-  const id = newId("run");
-  db.prepare(
-    `INSERT INTO runs (id, workspace_id, automation_id, status, trigger_type, created_at) VALUES (?, ?, ?, 'queued', 'manual', ?)`
-  ).run(id, DEFAULT_WORKSPACE_ID, automationId, new Date().toISOString());
-  return id;
-}
 
 function getRun(runId: string) {
   return db.prepare("SELECT * FROM runs WHERE id = ?").get(runId) as any;
@@ -30,6 +13,7 @@ function getApproval(runId: string) {
 
 describe("workflow engine — approval gating", () => {
   it("pauses before a high-risk step and resumes only after explicit approval", async () => {
+    const { workspaceId, userId } = seedTenant();
     const plan: WorkflowPlan = {
       id: "plan_1",
       title: "t",
@@ -41,21 +25,22 @@ describe("workflow engine — approval gating", () => {
         { id: "notify", kind: "notify", tool: "notify", riskLevel: "high", label: "notify", input: { subject: "hi", body: "hello" } },
       ],
     };
-    const automationId = insertAutomation(plan);
-    const runId = insertRun(automationId);
+    const automationId = seedAutomation(workspaceId, userId, { planJson: JSON.stringify(plan), requiresApproval: true });
+    const runId = seedRun(workspaceId, automationId);
 
-    await runWorkflow(runId, plan, { provider: localProvider, workspaceId: DEFAULT_WORKSPACE_ID, automationId });
+    await runWorkflow(runId, plan, { workspaceId, automationId });
     expect(getRun(runId).status).toBe("pending_approval");
 
     const approval = getApproval(runId);
     expect(approval.status).toBe("pending");
     db.prepare("UPDATE approvals SET status = 'approved' WHERE id = ?").run(approval.id);
 
-    await runWorkflow(runId, plan, { provider: localProvider, workspaceId: DEFAULT_WORKSPACE_ID, automationId });
+    await runWorkflow(runId, plan, { workspaceId, automationId });
     expect(getRun(runId).status).toBe("succeeded");
   });
 
   it("never auto-runs a rejected step, and the run ends cancelled", async () => {
+    const { workspaceId, userId } = seedTenant();
     const plan: WorkflowPlan = {
       id: "plan_2",
       title: "t",
@@ -67,9 +52,9 @@ describe("workflow engine — approval gating", () => {
         { id: "notify", kind: "notify", tool: "notify", riskLevel: "high", label: "notify", input: { subject: "hi", body: "hello" } },
       ],
     };
-    const automationId = insertAutomation(plan);
-    const runId = insertRun(automationId);
-    await runWorkflow(runId, plan, { provider: localProvider, workspaceId: DEFAULT_WORKSPACE_ID, automationId });
+    const automationId = seedAutomation(workspaceId, userId, { planJson: JSON.stringify(plan), requiresApproval: true });
+    const runId = seedRun(workspaceId, automationId);
+    await runWorkflow(runId, plan, { workspaceId, automationId });
 
     const approval = getApproval(runId);
     db.prepare("UPDATE approvals SET status = 'rejected' WHERE id = ?").run(approval.id);
@@ -82,6 +67,7 @@ describe("workflow engine — approval gating", () => {
   });
 
   it("still requires approval when the planner under-labels a step but the tool itself is medium/high risk", async () => {
+    const { workspaceId, userId } = seedTenant();
     // Simulates a planner bug: file_organize is intrinsically medium-risk
     // (see tools/fileOrganize.ts), but this step claims "low".
     const plan: WorkflowPlan = {
@@ -102,9 +88,9 @@ describe("workflow engine — approval gating", () => {
         },
       ],
     };
-    const automationId = insertAutomation(plan);
-    const runId = insertRun(automationId);
-    await runWorkflow(runId, plan, { provider: localProvider, workspaceId: DEFAULT_WORKSPACE_ID, automationId });
+    const automationId = seedAutomation(workspaceId, userId, { planJson: JSON.stringify(plan) });
+    const runId = seedRun(workspaceId, automationId);
+    await runWorkflow(runId, plan, { workspaceId, automationId });
 
     // The engine's own defense-in-depth check (max of step vs. tool risk)
     // must still pause for approval.
@@ -112,6 +98,7 @@ describe("workflow engine — approval gating", () => {
   });
 
   it("retries a failing tool up to the retry limit and records the run as failed with the real error", async () => {
+    const { workspaceId, userId } = seedTenant();
     const plan: WorkflowPlan = {
       id: "plan_4",
       title: "t",
@@ -130,14 +117,43 @@ describe("workflow engine — approval gating", () => {
         },
       ],
     };
-    const automationId = insertAutomation(plan);
-    const runId = insertRun(automationId);
-    await runWorkflow(runId, plan, { provider: localProvider, workspaceId: DEFAULT_WORKSPACE_ID, automationId });
+    const automationId = seedAutomation(workspaceId, userId, { planJson: JSON.stringify(plan) });
+    const runId = seedRun(workspaceId, automationId);
+    await runWorkflow(runId, plan, { workspaceId, automationId });
 
     const run = getRun(runId);
     expect(run.status).toBe("failed");
     const step = db.prepare("SELECT * FROM run_steps WHERE run_id = ?").get(runId) as any;
     expect(step.attempt).toBe(3); // MAX_ATTEMPTS in engine.ts
     expect(step.error).toMatch(/not allowed/i);
+  });
+
+  it("records usage events for LLM calls made during a run (summarize step)", async () => {
+    const { workspaceId, userId } = seedTenant();
+    const plan: WorkflowPlan = {
+      id: "plan_5",
+      title: "t",
+      summary: "s",
+      trigger: { type: "manual" },
+      requiresApproval: false,
+      createdBy: "ai",
+      steps: [
+        {
+          id: "summarize",
+          kind: "tool",
+          tool: "summarize_text",
+          riskLevel: "low",
+          label: "summarize",
+          input: { text: "Some content to summarize about nothing in particular here." },
+        },
+      ],
+    };
+    const automationId = seedAutomation(workspaceId, userId, { planJson: JSON.stringify(plan) });
+    const runId = seedRun(workspaceId, automationId);
+    await runWorkflow(runId, plan, { workspaceId, automationId });
+
+    expect(getRun(runId).status).toBe("succeeded");
+    const usage = db.prepare("SELECT * FROM usage_events WHERE workspace_id = ?").all(workspaceId);
+    expect(usage.length).toBeGreaterThan(0);
   });
 });

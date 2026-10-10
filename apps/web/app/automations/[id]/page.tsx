@@ -40,6 +40,16 @@ export default function AutomationDetailPage() {
     }
   }
 
+  async function remove() {
+    if (!confirm(`Delete "${automation.title}"? This stops its schedule and hides it from the list, but past runs stay in history.`)) return;
+    try {
+      await api.deleteAutomation(id);
+      router.push("/automations");
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   if (!automation) return error ? <div className="error-box">{error}</div> : <p>Loading…</p>;
 
   return (
@@ -69,6 +79,7 @@ export default function AutomationDetailPage() {
           {automation.status === "active" ? "Pause" : "Activate"}
         </button>
         <Link href="/runs"><button className="secondary">View runs</button></Link>
+        <button className="danger" onClick={remove}>Delete</button>
       </div>
     </>
   );

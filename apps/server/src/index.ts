@@ -1,64 +1,28 @@
 import "dotenv/config";
-import express, { type ErrorRequestHandler } from "express";
-import cors from "cors";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
-import { selectProvider } from "./providers/index.js";
-import { automationsRouter } from "./routes/automations.js";
-import { runsRouter } from "./routes/runs.js";
-import { startScheduler } from "./scheduler/index.js";
+import { createApp } from "./app.js";
 import { db } from "./db/index.js";
 import { closeBrowser } from "./tools/browserSnapshot.js";
-import { requireAuth, resolveAdminToken } from "./middleware/auth.js";
+import { resolveJwtSecret } from "./lib/jwt.js";
+import { ensureEncryptionKeyConfigured } from "./lib/crypto.js";
+import { startScheduler } from "./scheduler/index.js";
 
-const app = express();
-app.disable("x-powered-by");
-app.use(helmet());
+// Fail fast on missing production secrets rather than discovering it on the
+// first request (or, worse, silently falling back to an insecure default —
+// see docs/SECURITY.md).
+try {
+  resolveJwtSecret();
+  ensureEncryptionKeyConfigured();
+} catch (err: any) {
+  console.error(`[startup] ${err.message}`);
+  process.exit(1);
+}
 
-// Restricted to the configured frontend origin, not "*" — see docs/SECURITY.md.
-const corsOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
-app.use(cors({ origin: corsOrigin }));
-
-app.use(express.json({ limit: "1mb" }));
-
-// Generous global limit (abuse/DoS backstop) plus a tighter one on the
-// planning endpoint, which is the most expensive call (LLM/network-bound).
-app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
-const planLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
-
-const provider = selectProvider();
-console.log(`[startup] AI provider: ${provider.name} (local=${provider.isLocal})`);
-
-const adminToken = resolveAdminToken();
-const auth = requireAuth(adminToken);
-
-// Health check is intentionally unauthenticated (needed by load balancers /
-// container orchestrators / uptime checks before any credential exists).
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, provider: provider.name });
-});
-
-app.use("/api", auth, automationsRouter(provider, planLimiter));
-app.use("/api", auth, runsRouter(provider));
-
-app.get("/api/notifications", auth, (_req, res) => {
-  const rows = db.prepare("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50").all();
-  res.json(rows);
-});
-
-// Centralized error handler — every async route is wrapped with
-// asyncHandler() so a thrown/rejected error lands here instead of hanging
-// the request. Never leaks stack traces to the client.
-const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-  console.error("[error]", err);
-  res.status(500).json({ error: "Internal server error" });
-};
-app.use(errorHandler);
+const app = createApp();
 
 const port = Number(process.env.PORT ?? 4000);
 const server = app.listen(port, () => {
   console.log(`[startup] server listening on http://localhost:${port}`);
-  startScheduler(provider);
+  startScheduler();
 });
 
 // Graceful shutdown: stop accepting new connections, close the browser

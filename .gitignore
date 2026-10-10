@@ -9,3 +9,4 @@ build/
 coverage/
 data/
 *.log
+*.tsbuildinfo
