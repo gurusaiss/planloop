@@ -51,23 +51,40 @@ function Overview() {
   if (error) return <div className="error-box">{error}</div>;
   if (!stats) return <div className="skeleton" />;
 
-  const tiles: [string, number][] = [
-    ["Users", stats.users],
-    ["Active users", stats.activeUsers],
-    ["Workspaces", stats.workspaces],
-    ["Automations", stats.automations],
-    ["Runs total", stats.runsTotal],
-    ["Runs succeeded", stats.runsSucceeded],
-    ["Runs failed", stats.runsFailed],
-    ["Pending approvals", stats.pendingApprovals],
+  const groups: { label: string; items: { label: string; value: number; flagged?: boolean }[] }[] = [
+    {
+      label: "People & workspaces",
+      items: [
+        { label: "Users", value: stats.users },
+        { label: "Active users", value: stats.activeUsers },
+        { label: "Workspaces", value: stats.workspaces },
+        { label: "Automations", value: stats.automations },
+      ],
+    },
+    {
+      label: "Runs",
+      items: [
+        { label: "Total", value: stats.runsTotal },
+        { label: "Succeeded", value: stats.runsSucceeded },
+        { label: "Failed", value: stats.runsFailed, flagged: stats.runsFailed > 0 },
+        { label: "Pending approval", value: stats.pendingApprovals, flagged: stats.pendingApprovals > 0 },
+      ],
+    },
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-      {tiles.map(([label, value]) => (
-        <div className="card" key={label} style={{ marginTop: 0 }}>
-          <div style={{ fontSize: 28, fontWeight: 600 }}>{value}</div>
-          <div style={{ fontSize: 13, color: "var(--ink-dim)" }}>{label}</div>
+    <div className="stat-row">
+      {groups.map((g) => (
+        <div className="stat-group" key={g.label}>
+          <div className="stat-group-label">{g.label}</div>
+          <div className="stat-group-items">
+            {g.items.map((it) => (
+              <div key={it.label}>
+                <div className={`stat-item-value${it.flagged ? " flagged" : ""}`}>{it.value}</div>
+                <div className="stat-item-label">{it.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </div>

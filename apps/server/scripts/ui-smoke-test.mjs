@@ -72,7 +72,7 @@ console.log("✓ providers settings loaded");
 
 // --- Admin panel (this user is the instance owner) ---
 await page.goto("http://localhost:3000/admin");
-await page.waitForSelector("text=Pending approvals", { timeout: 10000 });
+await page.waitForSelector("text=Pending approval", { timeout: 10000 });
 await page.screenshot({ path: "/tmp/ui-7-admin-overview.png", fullPage: true });
 console.log("✓ admin overview loaded");
 

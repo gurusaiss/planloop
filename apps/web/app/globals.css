@@ -356,6 +356,53 @@ button:disabled { opacity: 0.45; cursor: default; transform: none; box-shadow: n
 .row { display: flex; gap: 10px; align-items: center; }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
+/* ---------------------------------------------------------------------
+   Stat row — an editorial alternative to the identical-tile dashboard
+   grid: one bordered strip, numbers separated by hairlines rather than
+   repeated card chrome, with room for a group label and a flagged state.
+   ------------------------------------------------------------------- */
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-sm);
+  margin-top: 18px;
+  overflow: hidden;
+}
+.stat-group {
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding: 18px 22px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stat-group:last-child { border-right: none; }
+.stat-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-faint);
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.stat-group-items { display: flex; gap: 26px; flex-wrap: wrap; }
+.stat-item-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+}
+.stat-item-value.flagged { color: var(--high); }
+.stat-item-label { font-size: 12.5px; color: var(--ink-dim); margin-top: 5px; }
+
+@media (max-width: 720px) {
+  .stat-group { border-right: none; }
+}
+
 .step {
   display: flex;
   gap: 12px;
