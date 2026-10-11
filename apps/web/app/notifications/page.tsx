@@ -34,9 +34,9 @@ export default function NotificationsPage() {
             <strong>{n.subject || "(no subject)"}</strong>
             <span className={`badge ${n.channel === "email" ? "low" : "medium"}`}>{n.channel}</span>
           </div>
-          <p style={{ fontSize: 14, color: "#c9cdd3", marginTop: 8, whiteSpace: "pre-wrap" }}>{n.body}</p>
+          <p style={{ fontSize: 14, color: "var(--ink)", marginTop: 8, whiteSpace: "pre-wrap" }}>{n.body}</p>
           <div className="row-between" style={{ marginTop: 10 }}>
-            <span style={{ fontSize: 12, color: "#9aa1ab" }}>{new Date(n.created_at).toLocaleString()}</span>
+            <span style={{ fontSize: 12, color: "var(--ink-dim)" }}>{new Date(n.created_at).toLocaleString()}</span>
             {!n.read_at && (
               <button className="secondary" onClick={() => markRead(n.id)}>
                 Mark read

@@ -19,7 +19,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, isPublic, pathname, router]);
 
-  if (isPublic) return <main className="shell">{children}</main>;
+  // Public (auth) pages own their own full-bleed layout (.auth-layout) —
+  // they're not constrained to the app shell's centered reading width.
+  if (isPublic) return <>{children}</>;
 
   if (loading) {
     return (

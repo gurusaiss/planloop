@@ -102,7 +102,7 @@ export default function WorkspacePage() {
           <input value={name} onChange={(e) => setName(e.target.value)} disabled={!canManage} style={{ maxWidth: 300 }} />
           {canManage && <button type="submit">Save</button>}
         </form>
-        <p style={{ fontSize: 13, color: "#9aa1ab", marginTop: 8 }}>Your role here: {activeWorkspace?.role}</p>
+        <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 8 }}>Your role here: {activeWorkspace?.role}</p>
       </div>
 
       <div className="card">
@@ -111,14 +111,14 @@ export default function WorkspacePage() {
         {members?.map((m) => (
           <div className="step" key={m.id}>
             <div style={{ flex: 1 }}>
-              <div>{m.name} {m.user_id === user?.id && <span style={{ color: "#9aa1ab" }}>(you)</span>}</div>
-              <div style={{ fontSize: 12, color: "#9aa1ab" }}>{m.email}</div>
+              <div>{m.name} {m.user_id === user?.id && <span style={{ color: "var(--ink-dim)" }}>(you)</span>}</div>
+              <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>{m.email}</div>
             </div>
             {canManage && m.user_id !== user?.id ? (
               <select
                 value={m.role}
                 onChange={(e) => changeRole(m.user_id, e.target.value)}
-                style={{ background: "#14171c", color: "#e8eaed", border: "1px solid #23272e", borderRadius: 6, padding: "4px 8px" }}
+                style={{ background: "var(--bg-raised)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px" }}
               >
                 <option value="viewer">viewer</option>
                 <option value="member">member</option>
@@ -152,7 +152,7 @@ export default function WorkspacePage() {
             <select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
-              style={{ background: "#14171c", color: "#e8eaed", border: "1px solid #23272e", borderRadius: 6, padding: "8px" }}
+              style={{ background: "var(--bg-raised)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px" }}
             >
               <option value="viewer">viewer</option>
               <option value="member">member</option>
@@ -160,7 +160,7 @@ export default function WorkspacePage() {
             </select>
             <button type="submit" disabled={inviting}>{inviting ? "Sending…" : "Send invite"}</button>
           </form>
-          {inviteResult && <p style={{ fontSize: 13, color: "#9aa1ab", marginTop: 10, wordBreak: "break-all" }}>{inviteResult}</p>}
+          {inviteResult && <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 10, wordBreak: "break-all" }}>{inviteResult}</p>}
 
           {invites && invites.filter((i) => !i.accepted_at).length > 0 && (
             <>

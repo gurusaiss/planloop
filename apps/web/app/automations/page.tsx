@@ -37,7 +37,7 @@ export default function AutomationsPage() {
             <strong>{a.title}</strong>
             <span className={`status ${a.status}`}>{a.status}</span>
           </div>
-          <div className="mono" style={{ color: "#9aa1ab", marginTop: 6, fontSize: 12 }}>
+          <div className="mono" style={{ color: "var(--ink-dim)", marginTop: 6, fontSize: 12 }}>
             {a.cron ? `schedule: ${a.cron}` : "manual trigger"}
           </div>
         </Link>

@@ -62,8 +62,8 @@ export default function ProfilePage() {
             <button type="submit" disabled={savingName}>{savingName ? "Saving…" : "Save name"}</button>
           </div>
         </form>
-        {nameMsg && <p style={{ fontSize: 13, color: "#9aa1ab", marginTop: 8 }}>{nameMsg}</p>}
-        <p style={{ fontSize: 13, color: "#9aa1ab", marginTop: 12 }}>Email: {user?.email} · Account role: {user?.role}</p>
+        {nameMsg && <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 8 }}>{nameMsg}</p>}
+        <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 12 }}>Email: {user?.email} · Account role: {user?.role}</p>
       </div>
 
       <div className="card">
@@ -89,14 +89,14 @@ export default function ProfilePage() {
             />
           </div>
           {pwError && <div className="error-box" style={{ marginBottom: 10 }}>{pwError}</div>}
-          {pwDone && <p style={{ fontSize: 13, color: "#3fb950", marginBottom: 10 }}>Password changed. Other sessions were logged out.</p>}
+          {pwDone && <p style={{ fontSize: 13, color: "var(--low)", marginBottom: 10 }}>Password changed. Other sessions were logged out.</p>}
           <button type="submit" disabled={savingPw}>{savingPw ? "Changing…" : "Change password"}</button>
         </form>
       </div>
 
       <div className="card">
         <h2>Sessions</h2>
-        <p style={{ fontSize: 13, color: "#9aa1ab", marginBottom: 12 }}>Sign out of this device, or every device this account is logged into.</p>
+        <p style={{ fontSize: 13, color: "var(--ink-dim)", marginBottom: 12 }}>Sign out of this device, or every device this account is logged into.</p>
         <div className="row">
           <button className="secondary" onClick={() => logout()}>Log out here</button>
           <button className="danger" onClick={async () => { await api.logoutAll(); await logout(); }}>Log out everywhere</button>

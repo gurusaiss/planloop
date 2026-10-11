@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
+import AuthBrandPanel from "@/components/AuthBrandPanel";
+import { IconSpinner, IconCheck } from "@/components/icons";
 
 function InviteForm() {
   const params = useSearchParams();
@@ -30,33 +32,53 @@ function InviteForm() {
       });
   }, [authLoading, user, token, status]);
 
-  if (!token) return <p style={{ margin: 80 }}>Missing invite token.</p>;
-
-  if (!authLoading && !user) {
-    const next = encodeURIComponent(`/invite?token=${token}`);
-    return (
-      <div style={{ maxWidth: 420, margin: "80px auto" }}>
-        <h1>You&apos;ve been invited</h1>
-        <p className="subtitle">Log in or create an account to accept this invite.</p>
-        <div className="row">
-          <Link href={`/login?next=${next}`}><button>Log in</button></Link>
-          <Link href={`/register?next=${next}`}><button className="secondary">Create account</button></Link>
-        </div>
+  const body = !token ? (
+    <div className="error-box">Missing invite token — check the link and try again.</div>
+  ) : !authLoading && !user ? (
+    <>
+      <h1>You&apos;ve been invited</h1>
+      <p className="subtitle">Log in or create an account to accept this invite.</p>
+      <div className="row">
+        <Link href={`/login?next=${encodeURIComponent(`/invite?token=${token}`)}`}>
+          <button>Log in</button>
+        </Link>
+        <Link href={`/register?next=${encodeURIComponent(`/invite?token=${token}`)}`}>
+          <button className="secondary">Create account</button>
+        </Link>
       </div>
-    );
-  }
-
-  return (
-    <div style={{ maxWidth: 420, margin: "80px auto" }}>
+    </>
+  ) : (
+    <>
       <h1>Workspace invite</h1>
-      {status === "accepting" && <p>Accepting invite…</p>}
+      {status === "accepting" && (
+        <div className="row" style={{ color: "var(--ink-dim)" }}>
+          <IconSpinner size={18} />
+          <span>Accepting invite…</span>
+        </div>
+      )}
       {status === "error" && <div className="error-box">{error}</div>}
       {status === "done" && (
         <>
-          <p>You&apos;ve joined {workspaceName ? <strong>{workspaceName}</strong> : "the workspace"}.</p>
-          <Link href="/"><button>Go to dashboard</button></Link>
+          <div className="row" style={{ color: "var(--low)", marginBottom: 16 }}>
+            <IconCheck size={18} />
+            <span>
+              You&apos;ve joined {workspaceName ? <strong>{workspaceName}</strong> : "the workspace"}.
+            </span>
+          </div>
+          <Link href="/">
+            <button>Go to dashboard</button>
+          </Link>
         </>
       )}
+    </>
+  );
+
+  return (
+    <div className="auth-layout">
+      <AuthBrandPanel />
+      <div className="auth-form-panel">
+        <div className="auth-form-box">{body}</div>
+      </div>
     </div>
   );
 }

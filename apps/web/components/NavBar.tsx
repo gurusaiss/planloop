@@ -3,40 +3,53 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+import { IconMark, IconBell, IconUsers, IconShield, IconLogout, IconLayers } from "./icons";
+import ThemeToggle from "./ThemeToggle";
 
 export default function NavBar() {
   const pathname = usePathname();
   const { user, workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, logout } = useAuth();
   const isSystemAdmin = user?.role === "owner" || user?.role === "admin";
 
-  const link = (href: string, label: string) => (
-    <Link href={href} style={pathname === href ? { color: "#e8eaed" } : undefined}>
+  const navLink = (href: string, label: string) => (
+    <Link href={href} className={pathname === href ? "nav-active" : undefined}>
       {label}
     </Link>
   );
 
+  const initial = (user?.name || "?").trim().charAt(0).toUpperCase();
+
   return (
     <nav>
-      <span className="brand">Automation Platform</span>
-      {link("/", "New automation")}
-      {link("/automations", "Automations")}
-      {link("/runs", "Runs")}
-      {link("/notifications", "Notifications")}
-      {link("/settings/workspace", "Workspace")}
-      {isSystemAdmin && link("/admin", "Admin")}
+      <Link href="/" className="brand">
+        <IconMark className="mark" />
+        Automation Platform
+      </Link>
+
+      {navLink("/", "New automation")}
+      {navLink("/automations", "Automations")}
+      {navLink("/runs", "Runs")}
+
+      <span style={{ flex: "0 0 1px", alignSelf: "stretch", background: "var(--border)", margin: "0 2px" }} />
+
+      <Link href="/notifications" title="Notifications" aria-label="Notifications" className="nav-icon-link">
+        <IconBell size={17} />
+      </Link>
+      <Link href="/settings/workspace" title="Workspace & members" aria-label="Workspace" className="nav-icon-link">
+        <IconUsers size={17} />
+      </Link>
+      {isSystemAdmin && (
+        <Link href="/admin" title="Admin" aria-label="Admin" className="nav-icon-link">
+          <IconShield size={17} />
+        </Link>
+      )}
 
       {workspaces.length > 1 && (
         <select
           value={activeWorkspaceId ?? ""}
           onChange={(e) => switchWorkspace(e.target.value)}
-          style={{
-            background: "#14171c",
-            color: "#e8eaed",
-            border: "1px solid #23272e",
-            borderRadius: 6,
-            padding: "4px 8px",
-            fontSize: 13,
-          }}
+          aria-label="Active workspace"
+          className="workspace-select"
         >
           {workspaces.map((w) => (
             <option key={w.id} value={w.id}>
@@ -46,14 +59,20 @@ export default function NavBar() {
         </select>
       )}
 
-      <span style={{ color: "#9aa1ab", fontSize: 13 }}>
-        {user?.name} {activeWorkspace && `· ${activeWorkspace.role}`}
-      </span>
-      <Link href="/settings/profile" style={{ fontSize: 13 }}>
-        Settings
+      <ThemeToggle />
+
+      <Link href="/settings/profile" className="user-chip" title={`${user?.name} · ${activeWorkspace?.role ?? ""}`}>
+        <span className="user-avatar">{initial}</span>
+        <span className="user-name">{user?.name}</span>
       </Link>
-      <button className="secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => logout()}>
-        Log out
+      <button
+        className="secondary nav-icon-link"
+        style={{ padding: 6, width: 30, height: 30 }}
+        onClick={() => logout()}
+        title="Log out"
+        aria-label="Log out"
+      >
+        <IconLogout size={16} />
       </button>
     </nav>
   );

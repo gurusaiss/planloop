@@ -31,7 +31,7 @@ export default function RunsPage() {
             <span className="mono">{r.id}</span>
             <span className={`status ${r.status}`}>{r.status}</span>
           </div>
-          <div style={{ color: "#9aa1ab", marginTop: 6, fontSize: 12 }}>
+          <div style={{ color: "var(--ink-dim)", marginTop: 6, fontSize: 12 }}>
             {r.trigger_type} · {new Date(r.created_at).toLocaleString()}
           </div>
         </Link>

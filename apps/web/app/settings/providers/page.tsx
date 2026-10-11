@@ -87,7 +87,7 @@ export default function ProvidersPage() {
 
             {p.id !== "local" && (
               <>
-                <p style={{ fontSize: 12, color: "#9aa1ab", margin: "8px 0" }}>
+                <p style={{ fontSize: 12, color: "var(--ink-dim)", margin: "8px 0" }}>
                   {existing?.has_api_key ? "API key is set (hidden)." : "No API key set yet."}
                 </p>
                 {canManage && (

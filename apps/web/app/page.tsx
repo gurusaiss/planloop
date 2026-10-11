@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { IconShield, IconLayers } from "@/components/icons";
 
 interface PlanStep {
   id: string;
@@ -60,25 +61,51 @@ export default function HomePage() {
     }
   }
 
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      submitPlan();
+    }
+  }
+
   return (
     <>
       <h1>What do you want automated?</h1>
       <p className="subtitle">
-        Describe the task in plain language. You&apos;ll see the exact plan before anything runs.
+        Describe the task in plain language. You&apos;ll see the exact plan — every step, every risk — before
+        anything runs.
       </p>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="e.g. Every weekday at 8am check https://example.com and notify me if anything changed"
-      />
-      <div className="row" style={{ marginTop: 10 }}>
+      <div style={{ position: "relative" }}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="e.g. Every weekday at 8am check https://example.com and notify me if anything changed"
+          style={{ fontSize: 16, minHeight: 110, paddingBottom: 36 }}
+        />
+        <span
+          className="mono"
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: 12,
+            fontSize: 11,
+            color: "var(--ink-faint)",
+            pointerEvents: "none",
+          }}
+        >
+          ⌘ + Enter
+        </span>
+      </div>
+
+      <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
         <button onClick={submitPlan} disabled={loading || !text.trim()}>
           {loading ? "Planning…" : "Generate plan"}
         </button>
         {EXAMPLES.map((ex) => (
           <button key={ex} className="secondary" onClick={() => setText(ex)}>
-            {ex.length > 34 ? ex.slice(0, 34) + "…" : ex}
+            {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
           </button>
         ))}
       </div>
@@ -90,20 +117,38 @@ export default function HomePage() {
       )}
 
       {result && (
-        <div className="card">
+        <div className="card" style={{ animation: "rise 0.3s cubic-bezier(0.16,1,0.3,1) both" }}>
           <div className="row-between">
-            <h1 style={{ fontSize: 18 }}>{result.plan.title}</h1>
-            <span className="badge" style={{ background: "rgba(91,140,255,0.15)", color: "#5b8cff" }}>
+            <div className="row" style={{ gap: 10 }}>
+              <IconLayers size={18} className="mono" />
+              <h1 style={{ fontSize: 19, margin: 0 }}>{result.plan.title}</h1>
+            </div>
+            <span className="badge" style={{ background: "var(--accent-wash)", color: "var(--accent)" }}>
               {result.plan.trigger.type === "schedule"
                 ? result.plan.summary.split("\n")[0].replace("Trigger: ", "")
                 : "manual trigger"}
             </span>
           </div>
 
-          <h2 style={{ marginTop: 16 }}>Steps</h2>
+          <h2 style={{ marginTop: 20 }}>Steps</h2>
           {result.plan.steps.map((s, i) => (
             <div className="step" key={s.id}>
-              <span className="mono" style={{ color: "#9aa1ab" }}>
+              <span
+                className="mono"
+                style={{
+                  color: "var(--ink-dim)",
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  flexShrink: 0,
+                }}
+              >
                 {i + 1}
               </span>
               <span style={{ flex: 1 }}>{s.label}</span>
@@ -111,17 +156,20 @@ export default function HomePage() {
             </div>
           ))}
 
-          <h2 style={{ marginTop: 16 }}>Why this plan</h2>
-          <p style={{ color: "#c9cdd3", fontSize: 14 }}>{result.rationale}</p>
+          <h2 style={{ marginTop: 20 }}>Why this plan</h2>
+          <p style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.6 }}>{result.rationale}</p>
 
           {result.plan.requiresApproval && (
-            <p style={{ fontSize: 13, color: "#d29922" }}>
-              ⚠ This plan includes a medium/high-risk step. It will pause and wait for your explicit
-              approval before that step runs, every time.
-            </p>
+            <div className="row" style={{ fontSize: 13, color: "var(--medium)", alignItems: "flex-start", marginTop: 4 }}>
+              <IconShield size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                This plan includes a medium/high-risk step. It will pause and wait for your explicit approval
+                before that step runs, every time.
+              </span>
+            </div>
           )}
 
-          <div className="row" style={{ marginTop: 12 }}>
+          <div className="row" style={{ marginTop: 16 }}>
             <button onClick={activate} disabled={activating}>
               {activating ? "Activating…" : "Review & Activate"}
             </button>

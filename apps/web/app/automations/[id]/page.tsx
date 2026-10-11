@@ -50,7 +50,16 @@ export default function AutomationDetailPage() {
     }
   }
 
-  if (!automation) return error ? <div className="error-box">{error}</div> : <p>Loading…</p>;
+  if (!automation) {
+    return error ? (
+      <div className="error-box">{error}</div>
+    ) : (
+      <>
+        <div className="skeleton" style={{ height: 28, width: 220 }} />
+        <div className="skeleton" style={{ marginTop: 20 }} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -64,7 +73,7 @@ export default function AutomationDetailPage() {
         <h2>Steps</h2>
         {automation.plan.steps.map((s: any, i: number) => (
           <div className="step" key={s.id}>
-            <span className="mono" style={{ color: "#9aa1ab" }}>{i + 1}</span>
+            <span className="mono" style={{ color: "var(--ink-dim)" }}>{i + 1}</span>
             <span style={{ flex: 1 }}>{s.label}</span>
             <span className={`badge ${s.riskLevel}`}>{s.riskLevel}</span>
           </div>

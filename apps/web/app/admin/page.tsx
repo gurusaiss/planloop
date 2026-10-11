@@ -67,7 +67,7 @@ function Overview() {
       {tiles.map(([label, value]) => (
         <div className="card" key={label} style={{ marginTop: 0 }}>
           <div style={{ fontSize: 28, fontWeight: 600 }}>{value}</div>
-          <div style={{ fontSize: 13, color: "#9aa1ab" }}>{label}</div>
+          <div style={{ fontSize: 13, color: "var(--ink-dim)" }}>{label}</div>
         </div>
       ))}
     </div>
@@ -109,14 +109,14 @@ function Users({ currentUserId, currentUserRole }: { currentUserId?: string; cur
       {data.items.map((u: any) => (
         <div className="step" key={u.id}>
           <div style={{ flex: 1 }}>
-            <div>{u.name} {u.id === currentUserId && <span style={{ color: "#9aa1ab" }}>(you)</span>}</div>
-            <div style={{ fontSize: 12, color: "#9aa1ab" }}>{u.email} · joined {new Date(u.created_at).toLocaleDateString()}</div>
+            <div>{u.name} {u.id === currentUserId && <span style={{ color: "var(--ink-dim)" }}>(you)</span>}</div>
+            <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>{u.email} · joined {new Date(u.created_at).toLocaleDateString()}</div>
           </div>
           <select
             value={u.role}
             disabled={u.id === currentUserId || (u.role === "owner" && currentUserRole !== "owner")}
             onChange={(e) => setRole(u.id, e.target.value)}
-            style={{ background: "#14171c", color: "#e8eaed", border: "1px solid #23272e", borderRadius: 6, padding: "4px 8px", marginRight: 8 }}
+            style={{ background: "var(--bg-raised)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", marginRight: 8 }}
           >
             <option value="member">member</option>
             <option value="admin">admin</option>
@@ -154,7 +154,7 @@ function Workspaces() {
         <div className="step" key={w.id}>
           <div style={{ flex: 1 }}>
             <div>{w.name}</div>
-            <div style={{ fontSize: 12, color: "#9aa1ab" }}>
+            <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>
               {w.member_count} member{w.member_count === 1 ? "" : "s"} · {w.automation_count} automation
               {w.automation_count === 1 ? "" : "s"} · created {new Date(w.created_at).toLocaleDateString()}
             </div>
@@ -182,11 +182,11 @@ function AuditLog() {
         <div className="step" key={a.id}>
           <div style={{ flex: 1 }}>
             <span className="mono">{a.action}</span>{" "}
-            <span style={{ color: "#9aa1ab" }}>
+            <span style={{ color: "var(--ink-dim)" }}>
               {a.user_email && `by ${a.user_email}`} {a.workspace_name && `in ${a.workspace_name}`}
             </span>
           </div>
-          <span style={{ fontSize: 12, color: "#9aa1ab" }}>{new Date(a.created_at).toLocaleString()}</span>
+          <span style={{ fontSize: 12, color: "var(--ink-dim)" }}>{new Date(a.created_at).toLocaleString()}</span>
         </div>
       ))}
     </div>
@@ -212,7 +212,7 @@ function Usage() {
           <div style={{ flex: 1 }}>
             {row.workspace_name} · <span className="mono">{row.kind}</span>
           </div>
-          <span style={{ fontSize: 12, color: "#9aa1ab" }}>
+          <span style={{ fontSize: 12, color: "var(--ink-dim)" }}>
             {row.events} events
             {row.tokens_in || row.tokens_out ? ` · ${row.tokens_in ?? 0} in / ${row.tokens_out ?? 0} out tokens` : ""}
             {row.duration_ms ? ` · ${Math.round(row.duration_ms / 1000)}s` : ""}

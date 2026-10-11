@@ -13,7 +13,7 @@ const password = "a-very-strong-password";
 
 // --- Register (becomes the instance owner — first user in a fresh DB) ---
 await page.goto("http://localhost:3000/register");
-await page.fill("input[placeholder='Full name']", "Ada Lovelace");
+await page.fill("#name", "Ada Lovelace");
 await page.fill("input[type='email']", email);
 await page.fill("input[type='password']", password);
 await page.getByRole("button", { name: "Create account" }).click();

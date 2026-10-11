@@ -56,14 +56,14 @@ export default function ApiKeysPage() {
 
       <div className="card">
         <h2>API keys</h2>
-        <p style={{ fontSize: 13, color: "#9aa1ab", marginBottom: 12 }}>
+        <p style={{ fontSize: 13, color: "var(--ink-dim)", marginBottom: 12 }}>
           Use an API key as a bearer token to call the API programmatically (same endpoints the UI uses — see docs/API.md).
         </p>
 
         {newToken && (
-          <div className="card" style={{ borderColor: "#3fb950", marginBottom: 12 }}>
+          <div className="card" style={{ borderColor: "var(--low)", marginBottom: 12 }}>
             <strong>Copy this now — it won&apos;t be shown again:</strong>
-            <div className="mono" style={{ marginTop: 8, wordBreak: "break-all", background: "#0b0d10", padding: 10, borderRadius: 6 }}>
+            <div className="mono" style={{ marginTop: 8, wordBreak: "break-all", background: "var(--bg)", padding: 10, borderRadius: 6 }}>
               {newToken}
             </div>
             <button className="secondary" style={{ marginTop: 10 }} onClick={() => setNewToken(null)}>
@@ -85,7 +85,7 @@ export default function ApiKeysPage() {
           <div className="step" key={k.id}>
             <div style={{ flex: 1 }}>
               <div className="mono">{k.prefix}…</div>
-              <div style={{ fontSize: 12, color: "#9aa1ab" }}>
+              <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>
                 {k.name} · created {new Date(k.created_at).toLocaleDateString()}
                 {k.last_used_at && ` · last used ${new Date(k.last_used_at).toLocaleDateString()}`}
               </div>

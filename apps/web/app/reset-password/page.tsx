@@ -4,6 +4,8 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import AuthBrandPanel from "@/components/AuthBrandPanel";
+import { IconCheck } from "@/components/icons";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -44,48 +46,61 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div style={{ maxWidth: 380, margin: "80px auto" }}>
-      <h1>Reset password</h1>
+    <div className="auth-layout">
+      <AuthBrandPanel />
+      <div className="auth-form-panel">
+        <div className="auth-form-box">
+          <h1>Reset password</h1>
 
-      {!token && !done && (
-        <form onSubmit={requestReset}>
-          <p className="subtitle">We&apos;ll email you a reset link if the account exists.</p>
-          <div style={{ marginBottom: 10 }}>
-            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
-          </div>
-          {error && <div className="error-box" style={{ marginBottom: 10 }}>{error}</div>}
-          <button type="submit" disabled={loading} style={{ width: "100%" }}>
-            {loading ? "Sending…" : "Send reset link"}
-          </button>
-        </form>
-      )}
+          {!token && !done && (
+            <form onSubmit={requestReset}>
+              <p className="subtitle">We&apos;ll email you a reset link if the account exists.</p>
+              <div style={{ marginBottom: 14 }}>
+                <label htmlFor="email">Email</label>
+                <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
+              </div>
+              {error && <div className="error-box" style={{ marginBottom: 14 }}>{error}</div>}
+              <button type="submit" disabled={loading} style={{ width: "100%" }}>
+                {loading ? "Sending…" : "Send reset link"}
+              </button>
+            </form>
+          )}
 
-      {!token && done && <p>If an account exists for that email, a reset link has been sent.</p>}
+          {!token && done && (
+            <div className="row" style={{ color: "var(--low)", gap: 8 }}>
+              <IconCheck size={18} />
+              <span>If an account exists for that email, a reset link has been sent.</span>
+            </div>
+          )}
 
-      {token && (
-        <form onSubmit={confirmReset}>
-          <p className="subtitle">Choose a new password.</p>
-          <div style={{ marginBottom: 10 }}>
-            <input
-              type="password"
-              placeholder="New password (min 10 characters)"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              minLength={10}
-              autoFocus
-              required
-            />
-          </div>
-          {error && <div className="error-box" style={{ marginBottom: 10 }}>{error}</div>}
-          <button type="submit" disabled={loading} style={{ width: "100%" }}>
-            {loading ? "Resetting…" : "Reset password"}
-          </button>
-        </form>
-      )}
+          {token && (
+            <form onSubmit={confirmReset}>
+              <p className="subtitle">Choose a new password.</p>
+              <div style={{ marginBottom: 14 }}>
+                <label htmlFor="newPassword">New password</label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  placeholder="Min 10 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={10}
+                  autoFocus
+                  required
+                />
+              </div>
+              {error && <div className="error-box" style={{ marginBottom: 14 }}>{error}</div>}
+              <button type="submit" disabled={loading} style={{ width: "100%" }}>
+                {loading ? "Resetting…" : "Reset password"}
+              </button>
+            </form>
+          )}
 
-      <p style={{ marginTop: 16, fontSize: 14, color: "#9aa1ab" }}>
-        <Link href="/login">Back to login</Link>
-      </p>
+          <p style={{ marginTop: 20, fontSize: 14, color: "var(--ink-dim)" }}>
+            <Link href="/login">Back to login</Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
